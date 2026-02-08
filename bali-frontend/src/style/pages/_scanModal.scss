@@ -1,0 +1,281 @@
+.scan-modal {
+  // Overlay
+  .ant-modal-wrap {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    overflow: hidden !important;
+  }
+
+  // Modal content
+  .ant-modal-content {
+    border-radius: 50px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    height: 849px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    
+    .ant-modal-close {
+      color: white;
+      inset-inline-end: 25px;
+      top: 25px;
+      z-index: 10;
+      
+      .ant-modal-close-x {
+        font-size: 24px;
+      }
+    }
+  }
+
+  .ant-modal-footer {
+    display: none;
+  }
+  
+  .ant-modal-body {
+    padding: 0;
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  
+  // Content wrapper with proper scaling
+  .scan-modal-content {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 50px;
+    overflow: hidden;
+  }
+
+  .modal-inner-content {
+    width: 100%;
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(12px, 2vh, 24px);
+  }
+
+  .modal-title {
+    color: white;
+    text-align: center;
+    font-weight: 600;
+    font-size: clamp(36px, 4.5vw, 56px); // Increased from clamp(20px, 3.5vw, 36px)
+    line-height: 1.0;
+    margin: 0;
+  }
+
+  .modal-subtitle {
+    color: white;
+    text-align: center;
+    font-weight: 400;
+    font-size: clamp(13px, 2vw, 22px);
+    line-height: 1.4;
+    margin: 0;
+    max-width: 90%;
+  }
+
+  .qr-image-wrapper {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    // margin: clamp(0px, 0.0vh, 8px) 0; // Reduced from clamp(8px, 1.5vh, 16px)
+  }
+
+  .qr-image {
+    border-radius: clamp(30px, 4vw, 50px);
+    width: clamp(180px, 25vw, 332px);
+    height: auto;
+    max-width: 100%;
+  }
+
+  .modal-description {
+    color: white;
+    text-align: center;
+    font-weight: 400;
+    font-size: clamp(11px, 1.6vw, 18px); // Reduced from clamp(13px, 2vw, 22px)
+    line-height: 1.2;
+    margin: 0;
+    max-width: 90%;
+  }
+
+  .modal-skip-btn {
+    width: clamp(120px, 15vw, 149px);
+    height: clamp(50px, 6vh, 63px);
+    font-size: clamp(14px, 1.8vw, 18px);
+    margin-top: clamp(4px, 0.8vh, 8px); // Reduced gap above button
+  }
+
+  .villa-dropdown-wrapper {
+    width: 100%;
+    max-width: 820px;
+  }
+
+  // Villa Dropdown Styling
+  .villa-dropdown {
+    width: 100%;
+    height: clamp(60px, 6.5vh, 85px);
+
+    .ant-select-selector {
+      height: 100% !important;
+      border-radius: 50px !important;
+      border: 2px solid rgba(255, 255, 255, 0.3) !important;
+      background: rgba(255, 255, 255, 0.1) !important;
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      padding: 0 clamp(18px, 2.5vw, 25px) !important;
+      
+      &:hover, &:focus {
+        border-color: rgba(255, 255, 255, 0.5) !important;
+      }
+
+      .ant-select-selection-placeholder,
+      .ant-select-selection-item {
+        color: white !important;
+        font-size: clamp(13px, 1.6vw, 16px);
+        font-weight: 400;
+        display: flex;
+        align-items: center;
+        height: 100%;
+      }
+    }
+
+    .ant-select-arrow {
+      color: white;
+      right: clamp(18px, 2.5vw, 25px);
+    }
+  }
+}
+
+// Dropdown menu styling
+.ant-select-dropdown {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border-radius: 20px !important;
+  padding: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+
+  .ant-select-item {
+    border-radius: 15px;
+    padding: 12px 20px;
+    font-size: clamp(14px, 1.5vw, 16px);
+    color: #333;
+    
+    &:hover {
+      background: rgba(255, 128, 0, 0.1);
+    }
+
+    &.ant-select-item-option-selected {
+      background: rgba(255, 128, 0, 0.2);
+      font-weight: 500;
+    }
+  }
+}
+
+// Tablet
+@media screen and (max-width: 1024px) {
+  .scan-modal {
+    .ant-modal-content {
+      height: 700px;
+      max-height: 85vh;
+      border-radius: 40px;
+    }
+    
+    .scan-modal-content {
+      padding: 30px 40px;
+    }
+
+    .modal-inner-content {
+      gap: clamp(10px, 1.8vh, 20px);
+    }
+  }
+}
+
+// Small tablet
+@media screen and (max-width: 768px) {
+  .scan-modal {
+    .ant-modal-content {
+      height: 600px;
+      max-height: 80vh;
+      border-radius: 35px;
+    }
+    
+    .scan-modal-content {
+      padding: 25px 30px;
+    }
+  }
+}
+
+// Mobile
+@media screen and (max-width: 600px) {
+  .scan-modal {
+    .ant-modal-content {
+      max-width: 95%;
+      height: 550px;
+      max-height: 85vh;
+      border-radius: 30px;
+      
+      .ant-modal-close {
+        inset-inline-end: 15px;
+        top: 15px;
+        
+        .ant-modal-close-x {
+          font-size: 20px;
+        }
+      }
+    }
+    
+    .scan-modal-content {
+      padding: 20px 20px;
+    }
+
+    .modal-inner-content {
+      gap: clamp(8px, 1.5vh, 16px);
+    }
+  }
+}
+
+// Very short screens (height-based)
+@media screen and (max-height: 700px) {
+  .scan-modal {
+    .ant-modal-content {
+      height: auto;
+      max-height: 92vh;
+    }
+    
+    .scan-modal-content {
+      padding: 20px 30px;
+    }
+
+    .modal-inner-content {
+      gap: clamp(6px, 1vh, 12px);
+    }
+  }
+}
+
+// Extra short screens
+@media screen and (max-height: 600px) {
+  .scan-modal {
+    .scan-modal-content {
+      padding: 15px 25px;
+    }
+
+    .modal-inner-content {
+      gap: 8px;
+    }
+
+    .qr-image-wrapper {
+      margin: 5px 0;
+    }
+  }
+}

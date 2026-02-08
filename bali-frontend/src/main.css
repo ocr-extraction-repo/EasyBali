@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Slider card styling */
+.slider-card {
+  filter: blur(2px);
+  opacity: 0.7;
+  transform: scale(0.85);
+  transition: all 0.3s ease;
+  box-shadow: none !important;
+}
+
+/* Center slide styling - restore original dimensions */
+.slick-center .slider-card {
+  filter: blur(0px);
+  opacity: 1;
+  transform: scale(1);
+  box-shadow: none !important;
+}
+
+.slick-slide {
+  padding: 0 0px;
+  outline: none;
+}
+
+/* Hide default arrows */
+.slick-prev, .slick-next {
+  display: none !important;
+}
+
+/* Custom slider container */
+.slick-list {
+  overflow: visible;
+}
+
+.slick-track {
+  display: flex;
+  align-items: center;
+}
+
+.slick-dots {
+  bottom: -50px;
+}
+
+.slick-dots li button:before {
+  color: #FF8000;
+  font-size: 12px;
+}
+
+.slick-dots li.slick-active button:before {
+  color: #FF8000;
+}
+
+/* Ensure proper spacing and prevent cut-off */
+.slider-item {
+  display: flex !important;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 17px !important;
+}
+
+/* Remove any background shadows from slider container */
+.slick-slider {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.slick-list {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Therapy slider specific styles */
+.therapy-slider-card {
+  /* height: auto;
+  width: 350px; */
+  filter: blur(2px);
+  opacity: 0.7;
+  margin-bottom: 50px;
+  transform: scale(0.85);
+  transition: all 0.3s ease;
+}
+
+/* Therapy center slide styling */
+.slick-center .therapy-slider-card {
+  /* height: auto;
+  width: 350px; */
+  filter: blur(0px);
+  opacity: 1;
+  margin-bottom: 50px;
+  transform: scale(1);
+}
+
+/* Mobile and tablet responsive styles for slider */
+@media (max-width: 768px) {
+  .slider-card {
+    filter: none !important;
+    opacity: 1 !important;
+    transform: scale(1) !important;
+  }
+  
+  .slick-slide .slider-card {
+    filter: none !important;
+    opacity: 1 !important;
+    transform: scale(1) !important;
+  }
+  
+  /* Therapy slider mobile styles */
+  .therapy-slider-card {
+    filter: none !important;
+    opacity: 1 !important;
+    transform: scale(1) !important;
+  }
+  
+  .slick-slide .therapy-slider-card {
+    filter: none !important;
+    opacity: 1 !important;
+    transform: scale(1) !important;
+  }
+  
+  .slider-item {
+    padding: 0 20px !important;
+  }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+  .slider-item {
+    padding: 0 10px !important;
+  }
+}
+
+/* Custom select dropdown styling */
+select option {
+  background-color: white !important;
+  color: black !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+}
+
+select option:hover {
+  background-color: #dbeafe !important;
+  color: black !important;
+}
+
+select option:checked {
+  background-color: #3b82f6 !important;
+  color: white !important;
+}
+
+.background-class{
+  background-image: url('./assets/images/bg.png');
+  object-fit: cover;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-attachment: fixed;
+} 
+
+.border-class{
+    border: 1px solid #c6c6c6 ;
+}
+
+.card-bg{
+    background-image: url('./assets/images/card.png');
+    object-fit: cover;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center center;
+
+}
+.word-class{
+    word-break: break-all;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}

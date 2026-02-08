@@ -1,0 +1,14 @@
+# User requested ignores
+.agent/
+zDocuments/
+zDocumnts/
+documentation_log.txt
+EASY Bali Milestones 2026 for New Devs.pdf
+
+# Standard ignores
+node_modules/
+.env
+dist/
+build/
+.DS_Store
+Thumbs.db
