@@ -1,0 +1,29 @@
+@use "./global";
+
+// base style
+@use "./base/color";
+@use "./base/reset";
+@use "./base/font";
+@use "./base/typography";
+@use "./base/animations";
+
+// components
+@use "./components/button";
+@use "./components/checkbox";
+@use "./components/input";
+@use "./components/pagination";
+@use "./components/switch";
+@use "./components/footer";
+@use "./components/textarea";
+@use "./components/alert";
+@use "./components/radioButton";
+@use "./components/table";
+@use "./components/select";
+
+// Pages
+
+@use "./pages/hero";
+@use "./pages/services";
+@use "./pages/experience";
+@use "./pages/chat";
+@use "./pages/scanModal";

@@ -1,0 +1,49 @@
+* {
+  font-family: "Urbanist";
+  line-height: normal;
+}
+
+body {
+  background: #f8f8f8;
+  h1 {
+    font-size: 64px;
+  }
+  h2 {
+    font-size: 56px;
+  }
+  h4 {
+    font-size: 30px;
+  }
+  h5 {
+    font-size: 24px;
+  }
+  h6 {
+    font-size: 18px;
+  }
+  p {
+    font-size: 16px;
+  }
+  
+}
+
+@media screen and (max-width: 600px) {
+  body {
+    h1 {
+      font-size: 40px;
+    }
+    h2 {
+      font-size: 30px;
+    }
+    h5 {
+      font-size: 16px;
+    }  h6 {
+      font-size: 14px;
+    }
+    p {
+      font-size: 14px;
+    }
+    input{
+      font-size: 16px;
+    }
+  }
+}
