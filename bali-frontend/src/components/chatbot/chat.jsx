@@ -6,7 +6,7 @@ import topLeftPng from "../../assets/images/top-left.png";
 import { getSubMenu } from '../services/api';
 import { chatAPI } from "../../api/chatApi"
 
-const Chat = () => {
+const Chat = ({ chatType: propChatType, toolName: propToolName, userId: propUserId, initialBotMessage: propInitialBotMessage }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Order Services");
@@ -136,12 +136,43 @@ const Chat = () => {
     hasInitialized.current = true;
 
     console.log("=== CHATBOT COMPONENT - RECEIVED VALUES ===");
+    console.log("Props ChatType:", propChatType);
+    console.log("Props ToolName:", propToolName);
     console.log("Location state:", location.state);
     console.log("Location key:", location.key);
 
     initialMessageProcessed.current = false;
 
-    if (location.state?.chatType && location.state?.userId) {
+    // ✅ NEW: Prioritize props over location.state
+    if (propChatType) {
+      // Route-based initialization (new architecture)
+      const userId = propUserId || chatAPI.getUserId();
+
+      console.log(`Initializing ${propChatType} chat for user ${userId}`);
+      setChatType(propChatType);
+      setUserId(userId);
+      setActiveTab(propToolName || "Chat");
+
+      // Use initialBotMessage from props if provided
+      if (propInitialBotMessage) {
+        setMessages([propInitialBotMessage]);
+        console.log("🆕 Starting with bot message from props");
+        initialMessageProcessed.current = true;
+      } else {
+        // Load existing chat history
+        const storedMessages = chatAPI.loadChatHistory(userId, propChatType);
+        if (storedMessages && storedMessages.length > 0) {
+          setMessages(storedMessages);
+          console.log("📂 Loaded chat history:", storedMessages.length, "messages");
+          initialMessageProcessed.current = true;
+        } else {
+          setMessages([]);
+          console.log("🆕 Starting empty chat");
+        }
+      }
+    }
+    // Legacy: location.state based initialization (backward compatibility)
+    else if (location.state?.chatType && location.state?.userId) {
       const currentChatType = location.state.chatType;
       const currentUserId = location.state.userId;
 
@@ -621,152 +652,13 @@ const Chat = () => {
   ];
 
   return (
-    <div className="chat relative flex gap-5 p-2 md:p-2 min-h-screen">
-      <img
-        src={topLeftPng}
-        alt="Top Left Icon"
-        className="absolute top-[10px] left-[0px] sm:left-[150px] md:left-[270px] w-[350px] sm:w-[200px] md:w-[450px] opacity-60 z-0"
-      />
-      <img
-        src={bottomRightPng}
-        alt="Bottom Right Icon"
-        className="absolute bottom-0 right-0 w-[390px] sm:w-[250px] md:w-[450px] opacity-60 z-0"
-      />
-      {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-      <div
-        className={`asidebar flex flex-col gap-10 items-center w-[320px] bg-[#DEDEDE] rounded-[30px] p-5 transition-transform duration-300 ease-in-out
-        ${isMobileMenuOpen ? "translate-x-0" : "translate-x-full"}
-        md:translate-x-0 md:static fixed top-2 right-2 bottom-2 z-50 md:z-auto
-      `}
-      >
-        <div className="flex justify-between items-center w-full md:justify-center">
-          <img
-            src="/assets/balilogo.svg"
-            alt="Logo"
-            className="w-[136px] h-9 cursor-pointer"
-            onClick={() => navigate('/')}
-          />
-          <button
-            className="md:hidden p-2"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div className="flex flex-col w-full">
-          {menuItems.map((item) => (
-            <button
-              key={item.name}
-              onClick={
-                item.name === "Order Services"
-                  ? handleOrderServicesClick
-                  : () => setActiveTab(item.name)
-              }
-              className={`text-[16px] flex items-center justify-start gap-3 font-medium w-full px-4 py-5 rounded-[50px] transition hover:bg-[#FF8000] hover:text-white group shadow-none ${loading && item.name === "Order Services"
-                  ? "opacity-50 cursor-not-allowed"
-                  : ""
-                } ${item.name !== "Order Services" && activeTab === item.name
-                  ? "bg-[#FF8000] text-white"
-                  : ""
-                }`}
-              disabled={loading && item.name === "Order Services"}
-              aria-disabled={loading && item.name === "Order Services"}
-            >
-              <img
-                src={item.icon}
-                alt={item.name}
-                className={`w-5 h-5 transition group-hover:filter group-hover:invert group-hover:brightness-0 ${loading && item.name === "Order Services" ? "animate-spin" : ""
-                  } ${item.name !== "Order Services" && activeTab === item.name
-                    ? "filter invert brightness-0"
-                    : ""
-                  }`}
-              />
-              {loading && item.name === "Order Services" ? "Loading..." : item.name}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="right w-full flex flex-col justify-between relative z-10">
-        <div className="header shadow-md flex justify-between items-center w-full h-[84px] lg:h-[97px] p-5 rounded-[50px] bg-white mb-5">
-          <div className="flex items-center gap-4">
-            <button
-              className="md:hidden p-2"
-              onClick={() => setIsMobileMenuOpen(true)}
-            >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-              </svg>
-            </button>
-            <h5 className="font-bold text-[18px] md:text-[24px] md:px-6">
-              Chat with our AI Bot
-            </h5>
-          </div>
-          <div className="flex justify-center items-center size-12 md:size-16 rounded-full border-[1px] border-solid border-black">
-            <h6 className="font-semibold text-sm md:text-base">EN</h6>
-          </div>
-        </div>
-        <div className="flex flex-col h-[calc(100vh-245px)] overflow-hidden gap-10">
-          <div className="messages-container flex-1 overflow-y-auto px-5 z-10">
-            <div className="flex flex-col gap-5">
-              {messages.map((message) => (
-                message.sender === "bot" ? (
-                  <div key={message.id} className="flex items-end gap-2">
-                    <div className="w-10 h-10 rounded-full bg-[#FF8000] flex items-center justify-center flex-shrink-0">
-                      <img
-                        src="/assets/ai-chat-icon.png"
-                        alt=""
-                        className="w-10 h-10"
-                      />
-                    </div>
-                    <div className="flex flex-col bg-[#FF8000] px-7 py-4 rounded-[25px] rounded-bl-none break-words max-w-[85%]">
-                      <p className="text-white font-medium leading-relaxed" style={{ whiteSpace: 'pre-line' }}>
-                        {renderBotMessage(message.text)}
-                      </p>
-                      <p className="text-white text-end font-bold text-sm mt-0">
-                        {message.timestamp}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    key={message.id}
-                    className="flex items-end gap-2 justify-end z-11"
-                  >
-                    <div className="flex flex-col bg-white px-8 py-4 rounded-[25px] rounded-br-none shadow-md break-words max-w-[85%]">
-                      <p className="text-black font-medium">{message.text}</p>
-                      <p className="text-gray-500 text-end font-bold text-sm mt-2">
-                        {message.timestamp}
-                      </p>
-                    </div>
-                  </div>
-                )
-              ))}
-              {apiLoading && (
-                <div className="flex items-end gap-2">
+    <>
+      <div className="flex flex-col h-[calc(100vh-245px)] overflow-hidden gap-10">
+        <div className="messages-container flex-1 overflow-y-auto px-5 z-10">
+          <div className="flex flex-col gap-5">
+            {messages.map((message) => (
+              message.sender === "bot" ? (
+                <div key={message.id} className="flex items-end gap-2">
                   <div className="w-10 h-10 rounded-full bg-[#FF8000] flex items-center justify-center flex-shrink-0">
                     <img
                       src="/assets/ai-chat-icon.png"
@@ -774,44 +666,75 @@ const Chat = () => {
                       className="w-10 h-10"
                     />
                   </div>
-                  <div className="flex flex-col bg-[#FF8000] px-7 py-4 rounded-[25px] rounded-bl-none">
-                    <div className="flex gap-2">
-                      <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                    </div>
+                  <div className="flex flex-col bg-[#FF8000] px-7 py-4 rounded-[25px] rounded-bl-none break-words max-w-[85%]">
+                    <p className="text-white font-medium leading-relaxed" style={{ whiteSpace: 'pre-line' }}>
+                      {renderBotMessage(message.text)}
+                    </p>
+                    <p className="text-white text-end font-bold text-sm mt-0">
+                      {message.timestamp}
+                    </p>
                   </div>
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-        </div>
-        <div className="px-[10px]">
-          <div className="rounded-full bg-white shadow-lg flex px-[40px] py-[20px] items-center justify-between h-[85px] mb-[20px] border-class">
-            <input
-              type="text"
-              placeholder="Chat with our AI Bot"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={apiLoading}
-              className="w-[90%] py-4 sm:py-6 rounded-[50px] text-[#333] text-[16px] sm:text-[18px] placeholder:text-[#8e8e8e] disabled:opacity-50"
-            />
-            <div className="flex items-center gap-4">
-              <img src="/assets/mic.svg" alt="" className="cursor-pointer" />
-              <img
-                src="/assets/chat-btn.svg"
-                alt=""
-                onClick={handleSendClick}
-                className={`w-[35px] h-[35px] sm:w-[50px] sm:h-[50px] ${apiLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                  }`}
-              />
-            </div>
+              ) : (
+                <div
+                  key={message.id}
+                  className="flex items-end gap-2 justify-end z-11"
+                >
+                  <div className="flex flex-col bg-white px-8 py-4 rounded-[25px] rounded-br-none shadow-md break-words max-w-[85%]">
+                    <p className="text-black font-medium">{message.text}</p>
+                    <p className="text-gray-500 text-end font-bold text-sm mt-2">
+                      {message.timestamp}
+                    </p>
+                  </div>
+                </div>
+              )
+            ))}
+            {apiLoading && (
+              <div className="flex items-end gap-2">
+                <div className="w-10 h-10 rounded-full bg-[#FF8000] flex items-center justify-center flex-shrink-0">
+                  <img
+                    src="/assets/ai-chat-icon.png"
+                    alt=""
+                    className="w-10 h-10"
+                  />
+                </div>
+                <div className="flex flex-col bg-[#FF8000] px-7 py-4 rounded-[25px] rounded-bl-none">
+                  <div className="flex gap-2">
+                    <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
         </div>
       </div>
-    </div>
+      <div className="px-[10px]">
+        <div className="rounded-full bg-white shadow-lg flex px-[40px] py-[20px] items-center justify-between h-[85px] mb-[20px] border-class">
+          <input
+            type="text"
+            placeholder="Chat with our AI Bot"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={apiLoading}
+            className="w-[90%] py-4 sm:py-6 rounded-[50px] text-[#333] text-[16px] sm:text-[18px] placeholder:text-[#8e8e8e] disabled:opacity-50"
+          />
+          <div className="flex items-center gap-4">
+            <img src="/assets/mic.svg" alt="" className="cursor-pointer" />
+            <img
+              src="/assets/chat-btn.svg"
+              alt=""
+              onClick={handleSendClick}
+              className={`w-[35px] h-[35px] sm:w-[50px] sm:h-[50px] ${apiLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
+            />
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 

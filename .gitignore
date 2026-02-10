@@ -12,3 +12,10 @@ dist/
 build/
 .DS_Store
 Thumbs.db
+.venv/
+venv/
+
+# Documentation files
+EASY Bali Guest Journey - Planned.pdf
+guest_journey.txt
+milestones.txt
