@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding, serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
@@ -14,23 +15,42 @@ class FlowCrypto:
             password = password.encode('utf-8')
         
         try:
-            if private_key_path:
-                with open(private_key_path, 'rb') as key_file:
-                    self.private_key = serialization.load_pem_private_key(
-                        key_file.read(),
-                        password=password,
-                        backend=default_backend()
-                    )
-            elif private_key_content:
+            key_data = None
+
+            # Priority 1: Explicit content
+            if private_key_content:
                 if isinstance(private_key_content, str):
-                    private_key_content = private_key_content.encode()
-                self.private_key = serialization.load_pem_private_key(
-                    private_key_content,
-                    password=password,
-                    backend=default_backend()
-                )
-            else:
-                raise ValueError("Either private_key_path or private_key_content must be provided")
+                    key_data = private_key_content.encode()
+                else:
+                    key_data = private_key_content
+
+            # Priority 2: File path
+            elif private_key_path:
+                # Try multiple paths
+                paths_to_try = [
+                    private_key_path,
+                    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), private_key_path),
+                ]
+                for p in paths_to_try:
+                    if os.path.exists(p):
+                        with open(p, 'rb') as key_file:
+                            key_data = key_file.read()
+                        break
+
+            # Priority 3: Environment variable
+            if key_data is None:
+                env_pem = os.environ.get("WHATSAPP_PRIVATE_KEY_PEM", "")
+                if env_pem:
+                    key_data = env_pem.encode()
+
+            if key_data is None:
+                raise ValueError("No private key source found (file, content, or WHATSAPP_PRIVATE_KEY_PEM env var)")
+
+            self.private_key = serialization.load_pem_private_key(
+                key_data,
+                password=password,
+                backend=default_backend()
+            )
                 
             print("✅ Private key loaded successfully!")
             

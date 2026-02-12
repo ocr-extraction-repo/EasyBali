@@ -1,0 +1,54 @@
+# render.yaml — Render Blueprint for EasyBali Backend
+# https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: easy-bali-backend
+    runtime: python
+    region: singapore  # Closest to Bali
+    plan: free
+    rootDir: easybali-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.12"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MONGO_URII
+        sync: false
+      - key: access_token
+        sync: false
+      - key: whatsapp_api_url
+        sync: false
+      - key: verify_token
+        sync: false
+      - key: AWS_ACCESS_KEY
+        sync: false
+      - key: AWS_SECRET_KEY
+        sync: false
+      - key: AWS_BUCKET_NAME
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: pinecone_api_key
+        sync: false
+      - key: pinecone_region
+        sync: false
+      - key: pinecone_cloud
+        sync: false
+      - key: XENDIT_SECRET_KEY
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - key: WEB_BASE_URL
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_PRIVATE_KEY_PASSWORD
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: WHATSAPP_PRIVATE_KEY_PEM
+        sync: false

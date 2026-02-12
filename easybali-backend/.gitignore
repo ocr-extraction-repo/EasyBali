@@ -3,8 +3,18 @@ __pycache__/
 .env
 myenv
 .cache/
+.venv/
 
-main.py
+# Root main.py only (test file), NOT app/main.py
+/main.py
 generate_keys.py
 public.pem
 base64_images.txt
+
+# Credential files (injected via env vars on Render)
+private.pem
+easy-bali-b74b61110525.json
+
+# Debug/temp files
+debug_monitor.py
+final_fix.py
