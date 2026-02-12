@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     AWS_SECRET_KEY: str = ""
     AWS_BUCKET_NAME: str = ""
     AWS_REGION: str = ""
-    MONGO_URII: str = ""
+    MONGO_URI: str = ""
     pinecone_api_key: str = ""
     pinecone_region: str = ""
     pinecone_cloud: str = ""
@@ -43,7 +43,7 @@ settings = Settings()
 
 # Warn about missing critical vars (non-fatal)
 _critical = [
-    "OPENAI_API_KEY", "MONGO_URII", "access_token",
+    "OPENAI_API_KEY", "MONGO_URI", "access_token",
     "whatsapp_api_url", "verify_token"
 ]
 for var in _critical:

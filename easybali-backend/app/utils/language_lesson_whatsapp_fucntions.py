@@ -13,14 +13,14 @@ async def language_lesson_ai(user_id: str) -> dict:
     try:
         chat_history = get_conversation_history(user_id)
         conversation = trim_history(chat_history)
-        response = await client.responses.create(
+        response = await client.chat.completions.create(
             model=settings.OPENAI_MODEL_NAME,
-            input=[
+            messages=[
                 {"role": "system", "content": (f"""You are a helpful Indonesian and Balinese language tutor. Your job is to create a lesson which includes: 1. Word, 2. Pronunciation, 3. Meaning in English, 4. Sentence in English and Indonesian. These are the previous lessons which you have generated {conversation} """)},
             ],
-            text={
-                "format": {
-                    "type": "json_schema",
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
                     "name": "language_lesson",
                     "schema": {
                         "type": "object",
@@ -37,8 +37,9 @@ async def language_lesson_ai(user_id: str) -> dict:
                 }
             }
         )
-        save_message(user_id, "assistant", response.output_text)
-        lesson_data = json.loads(response.output_text)
+        output_text = response.choices[0].message.content
+        save_message(user_id, "assistant", output_text)
+        lesson_data = json.loads(output_text)
         return lesson_data
     except json.JSONDecodeError:
         print("Failed to parse AI response")

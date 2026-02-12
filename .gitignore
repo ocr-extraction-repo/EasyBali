@@ -19,3 +19,6 @@ venv/
 EASY Bali Guest Journey - Planned.pdf
 guest_journey.txt
 milestones.txt
+
+pip_audit.log
+easybali-backend-old/

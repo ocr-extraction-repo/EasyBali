@@ -330,86 +330,78 @@ def is_health_check_request(request_data: dict) -> bool:
 
     return no_encryption_fields and (is_empty or contains_health_keywords or simple_structure)
 
+# Configure logging
+import logging
+logger = logging.getLogger(__name__)
+
 @router.post("/whatsapp-flow")
 async def handle_flow(request: Request):
     """WhatsApp Flow endpoint for combined booking flow"""
 
     try:
         body = await request.body()
-        print(f"📨 Received request, body length: {len(body)}")
-        print(f"📨 Request headers: {dict(request.headers)}")
-
+        logger.info(f"📨 Received flow request, body length: {len(body)}")
+        
         if len(body) == 0:
-            print("⚠️  Empty body received - returning OK")
+            logger.warning("mn Empty body received - returning OK")
             return Response(content="OK", status_code=200, media_type="text/plain")
 
         request_data = json.loads(body)
-        print(f"📋 Request keys: {list(request_data.keys())}")
-        print(f"📋 Full request data: {json.dumps(request_data, indent=2)}")
-
+        
         encrypted_flow_data = request_data.get("encrypted_flow_data")
         encrypted_aes_key = request_data.get("encrypted_aes_key")
         initial_vector = request_data.get("initial_vector")
 
-        print(f"🔍 DEBUG - Encrypted flow data: {encrypted_flow_data}")
-        print(f"🔍 DEBUG - Encrypted AES key: {encrypted_aes_key}")
-        print(f"🔍 DEBUG - Initial vector: {initial_vector}")
-
         if not crypto_handler:
-            print("❌ Crypto handler not initialized")
+            logger.critical("❌ Crypto handler not initialized")
             return Response(content="Crypto handler not initialized", status_code=500, media_type="text/plain")
 
         if not all([encrypted_flow_data, encrypted_aes_key, initial_vector]):
             missing = [x for x in ["encrypted_flow_data", "encrypted_aes_key", "initial_vector"]
                        if not request_data.get(x)]
-            print(f"❌ Missing: {missing}")
+            logger.error(f"❌ Missing required fields: {missing}")
             return Response(content=f"Missing: {missing}", status_code=400, media_type="text/plain")
 
         # 🔓 Decrypt
         try:
-            print("🔓 Attempting to decrypt...")
+            logger.debug("🔓 Attempting to decrypt...")
             decrypted_data = crypto_handler.decrypt_request(
                 encrypted_flow_data, encrypted_aes_key, initial_vector
             )
 
             if not decrypted_data:
-                print("❌ Decryption returned None")
+                logger.error("❌ Decryption returned None")
                 return Response(content="Decryption returned None", status_code=500, media_type="text/plain")
 
         except Exception as e:
-            print(f"❌ Decryption failed with error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"❌ Decryption failed: {e}", exc_info=True)
             return Response(
                 content=f"Decryption failed: {str(e)}",
                 status_code=500,
                 media_type="text/plain"
             )
 
-        print(f"✅ Decrypted data: {json.dumps(decrypted_data, indent=2)}")
+        logger.info(f"✅ Decrypted data successfully. Action: {decrypted_data.get('action')}")
 
         # 🎯 Handle actions
         action = decrypted_data.get("action", "UNKNOWN")
         version = decrypted_data.get("version", "UNKNOWN")
         flow_token = decrypted_data.get("flow_token", "UNKNOWN")
 
-        print(f"🎬 Action: {action}, Version: {version}, Flow Token: {flow_token}")
+        logger.info(f"🎬 Processing Action: {action}, Version: {version}, Token: {flow_token}")
 
         if action == "ping":
-            print("🏓 Handling PING request")
             response_data = {
                 "data": {
                     "status": "active"
                 }
             }
         elif action == "INIT":
-            print(f"🚀 Handling INIT request with token: {flow_token}")
             response_data = handle_init(decrypted_data)
         elif action == "data_exchange":
-            print(f"📊 Handling DATA_EXCHANGE request")
             response_data = handle_data_exchange(decrypted_data)
         else:
-            print(f"❓ Unknown action: {action}")
+            logger.warning(f"❓ Unknown action: {action}")
             response_data = {
                 "screen": "ERROR",
                 "data": {
@@ -417,16 +409,13 @@ async def handle_flow(request: Request):
                 }
             }
 
-        print(f"📤 Response data: {json.dumps(response_data, indent=2)}")
-
         # 🔐 Encrypt the response
         try:
             encrypted_response = crypto_handler.encrypt_response(response_data)
             if not encrypted_response:
                 raise Exception("Encryption returned None")
 
-            print(f"✅ Encrypted response length: {len(encrypted_response)}")
-            print(f"🔍 Encrypted response sample: {encrypted_response[:100]}...")
+            logger.info(f"✅ Response encrypted. Length: {len(encrypted_response)}")
 
             return Response(
                 content=encrypted_response,
@@ -435,7 +424,7 @@ async def handle_flow(request: Request):
             )
 
         except Exception as enc_error:
-            print(f"❌ Encryption failed: {enc_error}")
+            logger.error(f"❌ Encryption failed: {enc_error}", exc_info=True)
             return Response(
                 content=f"Encryption failed: {str(enc_error)}",
                 status_code=500,
@@ -443,16 +432,14 @@ async def handle_flow(request: Request):
             )
 
     except json.JSONDecodeError as e:
-        print(f"❌ JSON decode error: {e}")
+        logger.error(f"❌ JSON decode error: {e}")
         return Response(
             content=f"JSON decode error: {str(e)}",
             status_code=400,
             media_type="text/plain"
         )
     except Exception as e:
-        print(f"💥 Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"💥 Unexpected error in handle_flow: {e}", exc_info=True)
         return Response(
             content=f"Unexpected error: {str(e)}",
             status_code=500,
@@ -802,83 +789,70 @@ async def handle_category_flow(request: Request):
 
     try:
         body = await request.body()
-        print(f"📨 Category Flow - Received request, body length: {len(body)}")
-        print(f"📨 Request headers: {dict(request.headers)}")
-
+        logger.info(f"📨 Category Flow - Received request, body length: {len(body)}")
+        
         if len(body) == 0:
-            print("⚠️  Empty body received - returning OK")
+            logger.warning("Empty body received in category flow - returning OK")
             return Response(content="OK", status_code=200, media_type="text/plain")
 
         request_data = json.loads(body)
-        print(f"📋 Category Flow - Request keys: {list(request_data.keys())}")
-        print(f"📋 Full request data: {json.dumps(request_data, indent=2)}")
-
+        
         encrypted_flow_data = request_data.get("encrypted_flow_data")
         encrypted_aes_key = request_data.get("encrypted_aes_key")
         initial_vector = request_data.get("initial_vector")
 
-        print(f"🔍 DEBUG - Encrypted flow data: {encrypted_flow_data}")
-        print(f"🔍 DEBUG - Encrypted AES key: {encrypted_aes_key}")
-        print(f"🔍 DEBUG - Initial vector: {initial_vector}")
-
         if not crypto_handler:
-            print("❌ Category crypto handler not initialized")
+            logger.critical("❌ Category crypto handler not initialized")
             return Response(content="Category crypto handler not initialized", status_code=500, media_type="text/plain")
 
         if not all([encrypted_flow_data, encrypted_aes_key, initial_vector]):
             missing = [x for x in ["encrypted_flow_data", "encrypted_aes_key", "initial_vector"]
                        if not request_data.get(x)]
-            print(f"❌ Missing: {missing}")
+            logger.error(f"❌ Missing required fields in category flow: {missing}")
             return Response(content=f"Missing: {missing}", status_code=400, media_type="text/plain")
 
         # 🔓 Decrypt
         try:
-            print("🔓 Attempting to decrypt category flow...")
+            logger.debug("🔓 Attempting to decrypt category flow...")
             decrypted_data = crypto_handler.decrypt_request(
                 encrypted_flow_data, encrypted_aes_key, initial_vector
             )
 
             if not decrypted_data:
-                print("❌ Decryption returned None")
+                logger.error("❌ Category flow decryption returned None")
                 return Response(content="Decryption returned None", status_code=500, media_type="text/plain")
 
         except Exception as e:
-            print(f"❌ Decryption failed with error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"❌ Category flow decryption failed: {e}", exc_info=True)
             return Response(
                 content=f"Decryption failed: {str(e)}",
                 status_code=500,
                 media_type="text/plain"
             )
 
-        print(f"✅ Decrypted category data: {json.dumps(decrypted_data, indent=2)}")
+        logger.info(f"✅ Decrypted category data successfully. Action: {decrypted_data.get('action')}")
 
         # 🎯 Handle category actions
         action = decrypted_data.get("action", "UNKNOWN")
         version = decrypted_data.get("version", "UNKNOWN")
         flow_token = decrypted_data.get("flow_token", "UNKNOWN")
 
-        print(f"🎬 Category Flow - Action: {action}, Version: {version}, Flow Token: {flow_token}")
+        logger.info(f"🎬 Category Flow - Processing Action: {action}, Version: {version}, Token: {flow_token}")
 
         if action == "ping":
-            print("🏓 Handling PING request for category flow")
             response_data = {
                 "data": {
                     "status": "active"
                 }
             }
         elif action == "INIT":
-            print(f"🚀 Handling INIT request for category flow with token: {flow_token}")
             response_data = await handle_category_flow_init(decrypted_data)
         elif action == "data_exchange":
-            print(f"📊 Handling DATA_EXCHANGE request for category flow")
             response_data = await handle_category_flow_data_exchange(decrypted_data)
         elif action == "complete":
-            print(f"✅ Handling COMPLETE request for category flow")
             response_data = await handle_category_flow_complete(decrypted_data)
         else:
-            print(f"❓ Unknown action in category flow: {action}")
+            logger.warning(f"❓ Unknown action in category flow: {action}")
             response_data = {
                 "screen": "ERROR",
                 "data": {
@@ -886,16 +860,13 @@ async def handle_category_flow(request: Request):
                 }
             }
 
-        print(f"📤 Category Flow Response data: {json.dumps(response_data, indent=2)}")
-
         # 🔐 Encrypt the response
         try:
             encrypted_response = crypto_handler.encrypt_response(response_data)
             if not encrypted_response:
                 raise Exception("Encryption returned None")
 
-            print(f"✅ Encrypted category response length: {len(encrypted_response)}")
-            print(f"🔍 Encrypted response sample: {encrypted_response[:100]}...")
+            logger.info(f"✅ Category flow response encrypted. Length: {len(encrypted_response)}")
 
             return Response(
                 content=encrypted_response,
@@ -904,7 +875,7 @@ async def handle_category_flow(request: Request):
             )
 
         except Exception as enc_error:
-            print(f"❌ Encryption failed: {enc_error}")
+            logger.error(f"❌ Category flow encryption failed: {enc_error}", exc_info=True)
             return Response(
                 content=f"Encryption failed: {str(enc_error)}",
                 status_code=500,
@@ -912,16 +883,14 @@ async def handle_category_flow(request: Request):
             )
 
     except json.JSONDecodeError as e:
-        print(f"❌ JSON decode error: {e}")
+        logger.error(f"❌ JSON decode error in category flow: {e}")
         return Response(
             content=f"JSON decode error: {str(e)}",
             status_code=400,
             media_type="text/plain"
         )
     except Exception as e:
-        print(f"💥 Unexpected error in category flow: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"💥 Unexpected error in handle_category_flow: {e}", exc_info=True)
         return Response(
             content=f"Unexpected error: {str(e)}",
             status_code=500,

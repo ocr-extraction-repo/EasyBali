@@ -7,9 +7,9 @@ async def currency_ai(user_id: str, query: str) -> dict:
     try:
         chat_history = get_conversation_history(user_id)
         conversation = trim_history(chat_history)
-        response = await client.responses.create(
+        response = await client.chat.completions.create(
             model=settings.OPENAI_MODEL_NAME,
-            input=[
+            messages=[
                 {"role": "system", "content": (f""" 
                                                 You are a SPECIALIZED Currency Conversion Assistant for EasyBali - helping tourists convert currency for their Bali trip.
                                                 
@@ -50,8 +50,9 @@ async def currency_ai(user_id: str, query: str) -> dict:
             ],
         )
         save_message(user_id, "user", query)
-        save_message(user_id, "assistant", response.output_text)
-        return response.output_text
+        output_text = response.choices[0].message.content
+        save_message(user_id, "assistant", output_text)
+        return output_text
     
 
     except Exception as e:

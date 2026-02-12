@@ -16,7 +16,7 @@ services:
         value: "3.10.12"
       - key: OPENAI_API_KEY
         sync: false
-      - key: MONGO_URII
+      - key: MONGO_URI
         sync: false
       - key: access_token
         sync: false
