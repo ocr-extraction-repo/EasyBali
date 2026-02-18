@@ -1,5 +1,6 @@
 import boto3
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from botocore.exceptions import ClientError
 import uuid
@@ -8,8 +9,15 @@ import os
 import tempfile
 from app.settings.config import settings
 
+logger = logging.getLogger(__name__)
+
+
 class S3Service:
     def __init__(self):
+        if not settings.AWS_REGION:
+            raise RuntimeError(
+                "AWS_REGION is not configured. Set the AWS_REGION environment variable."
+            )
         self.s3_client = boto3.client(
             's3',
             aws_access_key_id=settings.AWS_ACCESS_KEY,
@@ -44,10 +52,10 @@ class S3Service:
             }
             
         except ClientError as e:
-            print(f"S3 upload error: {e}")
+            logger.error(f"S3 upload error: {e}")
             return {'success': False, 'error': str(e)}
         except Exception as e:
-            print(f"Unexpected error: {e}")
+            logger.error(f"Unexpected error: {e}")
             return {'success': False, 'error': str(e)}
 
     def _upload_file_sync(self, file_path: str, object_key: str):
@@ -59,5 +67,20 @@ class S3Service:
             ExtraArgs={'ContentType': 'application/pdf'}
         )
 
-# Initialize S3 service
-s3_service = S3Service()
+
+# Lazy singleton — only instantiated on first use so missing AWS_REGION
+# does NOT crash the app at import time.
+_s3_service: S3Service | None = None
+
+
+def get_s3_service() -> S3Service:
+    global _s3_service
+    if _s3_service is None:
+        _s3_service = S3Service()
+    return _s3_service
+
+
+# Keep backward-compatible name as a property-like accessor
+# (callers that do `from Invoice_bucket import s3_service` will get None at import
+#  but should use get_s3_service() instead — see invoice_generator.py)
+s3_service = None  # Deprecated: use get_s3_service()

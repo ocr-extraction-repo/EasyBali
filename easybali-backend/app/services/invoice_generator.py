@@ -3,7 +3,7 @@ from reportlab.lib.pagesizes import A4
 import tempfile
 import os
 from datetime import datetime
-from app.services.Invoice_bucket import s3_service
+from app.services.Invoice_bucket import get_s3_service
 
 async def generate_and_upload_invoice(order_data: dict, payment_data: dict) -> dict:
     try:
@@ -35,7 +35,7 @@ async def generate_and_upload_invoice(order_data: dict, payment_data: dict) -> d
         
         # Upload to S3
         object_key = f"invoices/{order_data['order_number']}/invoice_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        upload_result = await s3_service.upload_file_async(temp_path, object_key)
+        upload_result = await get_s3_service().upload_file_async(temp_path, object_key)
         
         # Clean up temporary file
         os.unlink(temp_path)
