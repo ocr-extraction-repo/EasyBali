@@ -32,8 +32,8 @@ def _resolve_xendit_webhook_url() -> str:
     path = settings.XENDIT_WEBHOOK_PATH or "/webhook/xendit"
     if not path.startswith("/"):
         path = f"/{path}"
-    # Use backend base URL for callbacks; BASE_URL may point to frontend domain.
-    callback_base = settings.WEB_BASE_URL or settings.BASE_URL
+    # Callbacks must target backend URL.
+    callback_base = settings.BASE_URL or settings.WEB_BASE_URL
     return f"{callback_base}{path}"
 
 
@@ -131,40 +131,55 @@ async def create_xendit_payment_with_distribution(order: Order):
                 'error': 'XENDIT_SECRET_KEY is not configured'
             }
 
-        # Get price distribution
         price_distribution = await get_price_distribution(order.service_name)
-        if not price_distribution:
-            return {
-                'success': False,
-                'error': 'Unable to fetch price distribution'
-            }
-        
-        # Get bank details for both parties
-        service_provider_bank = await get_service_provider_bank_details(order.service_provider_code)
-        villa_bank = await get_villa_bank_details(order.villa_code)
-        
-        if not service_provider_bank or not villa_bank:
-            return {
-                'success': False,
-                'error': 'Unable to fetch bank details'
-            }
+        service_provider_bank = await get_service_provider_bank_details(order.service_provider_code) if order.service_provider_code else None
+        villa_bank = await get_villa_bank_details(order.villa_code) if order.villa_code else None
         
         external_id = f"booking_{order.order_number}_{int(datetime.datetime.now().timestamp())}"
         
         try:
             price_clean = clean_price_string(order.price)
-            service_provider_price = clean_price_string(price_distribution['service_provider_price'])
-            villa_price = clean_price_string(price_distribution['villa_price'])
         except ValueError as e:
             logger.error(f"Price cleaning error for order {order.order_number}: {e}")
             return {
                 'success': False,
                 'error': f"Invalid price format: {order.price}"
             }
+
+        distribution_data = None
+        distribution_warning = None
+        if price_distribution and service_provider_bank and villa_bank:
+            try:
+                service_provider_price = clean_price_string(price_distribution['service_provider_price'])
+                villa_price = clean_price_string(price_distribution['villa_price'])
+                distribution_data = {
+                    'service_provider': {
+                        'amount': service_provider_price,
+                        'bank_details': service_provider_bank
+                    },
+                    'villa': {
+                        'amount': villa_price,
+                        'bank_details': villa_bank
+                    },
+                    'total_distribution': service_provider_price + villa_price
+                }
+            except Exception as dist_err:
+                distribution_warning = f"Split distribution unavailable: {dist_err}"
+                logger.warning(f"{distribution_warning} (order {order.order_number})")
+        else:
+            distribution_warning = "Split distribution unavailable: missing price-distribution or bank details"
+            logger.warning(
+                f"{distribution_warning} for order {order.order_number} "
+                f"(service_provider_code={order.service_provider_code}, villa_code={order.villa_code})"
+            )
         
         # Create API client and instance
         api_client = xendit.ApiClient()
         api_instance = InvoiceApi(api_client)
+
+        description_date = order.date.strftime('%d-%m-%Y') if order.date else "selected date"
+        customer_name = order.name or "Customer"
+        customer_mobile = order.phone_number or order.sender_id
         
         # Create invoice request
         create_invoice_request = CreateInvoiceRequest(
@@ -172,10 +187,10 @@ async def create_xendit_payment_with_distribution(order: Order):
             amount=float(price_clean),
             currency='IDR',
             invoice_duration=86400.0,  # 24 hours in seconds
-            description=f"Payment for {order.service_name} on {order.date.strftime('%d-%m-%Y')} at {order.time}",
+            description=f"Payment for {order.service_name} on {description_date} at {order.time}",
             customer=CustomerObject(
-                given_names='Customer',
-                mobile_number=order.sender_id,
+                given_names=customer_name,
+                mobile_number=customer_mobile,
             ),
             customer_notification_preference=NotificationPreference(
                 invoice_created=[NotificationChannel("whatsapp")],
@@ -198,26 +213,14 @@ async def create_xendit_payment_with_distribution(order: Order):
         # Create the invoice
         api_response = api_instance.create_invoice(create_invoice_request)
         
-        # Prepare distribution data
-        distribution_data = {
-            'service_provider': {
-                'amount': service_provider_price,
-                'bank_details': service_provider_bank
-            },
-            'villa': {
-                'amount': villa_price,
-                'bank_details': villa_bank
-            },
-            'total_distribution': service_provider_price + villa_price
-        }
-        
         return {
             'success': True,
             'invoice_id': api_response.id,
             'payment_url': api_response.invoice_url,
             'external_id': external_id,
             'expires_at': api_response.expiry_date,
-            'distribution_data': distribution_data
+            'distribution_data': distribution_data,
+            'distribution_warning': distribution_warning
         }
         
     except xendit.XenditSdkException as e:
