@@ -18,4 +18,4 @@ COPY . .
 EXPOSE 8000
 
 # Run the FastAPI app (use $PORT for Render compatibility)
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

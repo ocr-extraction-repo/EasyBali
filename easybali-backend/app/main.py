@@ -1,11 +1,51 @@
 import uvicorn
 import os
 import logging
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+# Normalize common Render env-var pasting issues (surrounding quotes, literal \n sequences).
+def _strip_outer_quotes(value: str) -> str:
+    if not isinstance(value, str):
+        return value
+    s = value.strip()
+    if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
+        return s[1:-1]
+    return s
+
+
+def _normalize_pem_multiline(value: str) -> str:
+    """Convert literal \\n sequences into real newlines for PEM blocks."""
+    if not isinstance(value, str):
+        return value
+    s = _strip_outer_quotes(value)
+    if "\\n" in s and "\n" not in s:
+        s = s.replace("\\n", "\n")
+    return s
+
+
+def _normalize_google_creds_json(value: str) -> str:
+    """Ensure service account JSON is a JSON object string; normalize private_key newlines."""
+    if not isinstance(value, str) or not value.strip():
+        return value
+
+    raw = _strip_outer_quotes(value)
+    try:
+        parsed = json.loads(raw)
+        # Handle accidentally double-encoded JSON (string containing JSON).
+        if isinstance(parsed, str):
+            parsed = json.loads(parsed)
+        if isinstance(parsed, dict):
+            pk = parsed.get("private_key")
+            if isinstance(pk, str) and "\\n" in pk and "\n" not in pk:
+                parsed["private_key"] = pk.replace("\\n", "\n")
+            return json.dumps(parsed)
+    except Exception:
+        return raw
+
+    return raw
 
 # ─────────────────────────────────────────────────
 # Pre-startup: Write credential files from env vars
@@ -14,29 +54,26 @@ logger = logging.getLogger(__name__)
 def _write_credential_files():
     """Write credential files from environment variables if they don't exist on disk."""
     # Google Sheets credentials
-    google_creds = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    google_creds = _normalize_google_creds_json(os.environ.get("GOOGLE_CREDENTIALS_JSON"))
     creds_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "easy-bali-b74b61110525.json")
     if google_creds and not os.path.exists(creds_path):
         try:
             with open(creds_path, "w") as f:
                 f.write(google_creds)
-            logger.info("✅ Google credentials written from env var")
+            logger.info("Google credentials written from env var")
         except Exception as e:
-            logger.warning(f"⚠️  Could not write Google credentials: {e}")
-
+            logger.warning(f"Could not write Google credentials: {e}")
     # WhatsApp private key
-    pem_content = os.environ.get("WHATSAPP_PRIVATE_KEY_PEM")
+    pem_content = _normalize_pem_multiline(os.environ.get("WHATSAPP_PRIVATE_KEY_PEM"))
     pem_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "private.pem")
     if pem_content and not os.path.exists(pem_path):
         try:
             with open(pem_path, "w") as f:
                 f.write(pem_content)
-            logger.info("✅ Private key written from env var")
+            logger.info("Private key written from env var")
         except Exception as e:
-            logger.warning(f"⚠️  Could not write private key: {e}")
-
+            logger.warning(f"Could not write private key: {e}")
 _write_credential_files()
-
 # ─────────────────────────────────────────────────
 # Import routers
 # ─────────────────────────────────────────────────
@@ -52,8 +89,8 @@ from app.routes.language_lesson import router as language_lesson
 from app.routes.websockett import router as web_order_flow
 from app.routes.currency_route import router as currency_converter
 from app.routes.villa_links import router as villa_links_router
+from app.routes.payment_recovery_routes import router as payment_recovery_router
 from app.services.menu_services import start_cache_refresh, stop_cache_refresh
-
 # ─────────────────────────────────────────────────
 # FastAPI App
 # ─────────────────────────────────────────────────
@@ -62,7 +99,6 @@ app = FastAPI(
     description="API's for easy-bali chatbot",
     version="1.0.0"
 )
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -70,7 +106,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Include routes
 app.include_router(menu_router)
 app.include_router(chat_router)
@@ -84,16 +119,15 @@ app.include_router(web_order_flow)
 app.include_router(language_lesson)
 app.include_router(currency_converter)
 app.include_router(villa_links_router)
-
+app.include_router(payment_recovery_router, tags=["Payment Recovery"])
 
 @app.on_event("startup")
 def on_startup():
     try:
         start_cache_refresh()
-        logger.info("✅ Cache refresh started")
+        logger.info("Cache refresh started")
     except Exception as e:
-        logger.warning(f"⚠️  Cache refresh failed to start: {e}")
-
+        logger.warning(f"Cache refresh failed to start: {e}")
 
 @app.on_event("shutdown")
 def on_shutdown():
@@ -101,7 +135,6 @@ def on_shutdown():
         stop_cache_refresh()
     except Exception:
         pass
-
 
 @app.on_event("startup")
 async def init():
@@ -112,20 +145,17 @@ async def init():
             model="gpt-4",
             messages=[{"role": "system", "content": "System check"}]
         )
-        logger.info("✅ OpenAI connection verified")
+        logger.info("OpenAI connection verified")
     except Exception as e:
-        logger.warning(f"⚠️  OpenAI init check failed (non-fatal): {e}")
-
+        logger.warning(f"OpenAI init check failed (non-fatal): {e}")
 
 @app.get("/")
 def read_root():
     return {"msg": "Welcome to EASY-BALI chatbot", "status": "running"}
 
-
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "easybali-backend"}
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

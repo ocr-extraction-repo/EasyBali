@@ -1,10 +1,32 @@
 import base64
 import json
 import os
+import logging
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding, serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
 from cryptography.hazmat.backends import default_backend
+
+logger = logging.getLogger(__name__)
+
+def _strip_outer_quotes(value: str) -> str:
+    if not isinstance(value, str):
+        return value
+    s = value.strip()
+    if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
+        return s[1:-1]
+    return s
+
+
+def _normalize_pem_multiline(value: str) -> str:
+    """Convert literal \\n sequences into real newlines for PEM blocks."""
+    if not isinstance(value, str):
+        return value
+    s = _strip_outer_quotes(value)
+    if "\\n" in s and "\n" not in s:
+        s = s.replace("\\n", "\n")
+    return s
+
 
 class FlowCrypto:
     def __init__(self, private_key_path=None, private_key_content=None, password=None):
@@ -41,6 +63,7 @@ class FlowCrypto:
             if key_data is None:
                 env_pem = os.environ.get("WHATSAPP_PRIVATE_KEY_PEM", "")
                 if env_pem:
+                    env_pem = _normalize_pem_multiline(env_pem)
                     key_data = env_pem.encode()
 
             if key_data is None:
@@ -52,7 +75,7 @@ class FlowCrypto:
                 backend=default_backend()
             )
                 
-            print("✅ Private key loaded successfully!")
+            logger.info("Private key loaded successfully")
             
         except ValueError as e:
             if "Bad decrypt" in str(e) or "incorrect password" in str(e).lower():
@@ -63,7 +86,7 @@ class FlowCrypto:
             raise Exception(f"Unexpected error loading private key: {e}")
     
     def decrypt_request(self, encrypted_flow_data, encrypted_aes_key, initial_vector):
-        print("🔓 Starting decryption process...")
+        logger.debug("Starting decryption process")
         flow_data = base64.b64decode(encrypted_flow_data)
         encrypted_key = base64.b64decode(encrypted_aes_key)
         iv = base64.b64decode(initial_vector)

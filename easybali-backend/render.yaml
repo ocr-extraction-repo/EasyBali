@@ -9,11 +9,16 @@ services:
     plan: free
     rootDir: easybali-backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Use `python -m uvicorn` so it works even if the `uvicorn` entrypoint isn't on PATH.
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.10.12"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONIOENCODING
+        value: "utf-8"
       - key: APP_ENV
         value: "staging"
       - key: OPENAI_API_KEY

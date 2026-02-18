@@ -3,10 +3,18 @@ from dotenv import load_dotenv
 from typing import Optional
 import logging
 import os
+from pydantic import field_validator
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_outer_quotes(value: str) -> str:
+    s = value.strip()
+    if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
+        return s[1:-1]
+    return s
 
 
 class Settings(BaseSettings):
@@ -39,6 +47,15 @@ class Settings(BaseSettings):
     GOOGLE_CREDENTIALS_JSON: str = ""
     WHATSAPP_PRIVATE_KEY_PEM: str = ""
 
+    # Render users sometimes paste values with surrounding quotes, e.g. MONGO_URI="mongodb+srv://..."
+    # Strip only ONE outer quote pair so URIs/keys parse correctly.
+    @field_validator("*", mode="before")
+    @classmethod
+    def _normalize_env_strings(cls, v):
+        if isinstance(v, str) and v:
+            return _strip_outer_quotes(v)
+        return v
+
     class Config:
         env_file = ".env"
 
@@ -52,6 +69,6 @@ _critical = [
 ]
 for var in _critical:
     if not getattr(settings, var, ""):
-        logger.warning(f"⚠️  Missing env var: {var}")
+        logger.warning(f"Missing env var: {var}")
 if settings.APP_ENV.lower() == "production" and not settings.XENDIT_ENABLE_DISBURSEMENT:
     logger.warning("XENDIT_ENABLE_DISBURSEMENT is disabled in production.")

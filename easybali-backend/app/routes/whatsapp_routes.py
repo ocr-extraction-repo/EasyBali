@@ -4,6 +4,7 @@ import httpx
 from datetime import date
 import datetime
 from pydantic import BaseModel
+import logging
 
 from fastapi import HTTPException, Request, BackgroundTasks, Response
 from fastapi import APIRouter
@@ -16,6 +17,7 @@ from app.routes.xendit_webhook import handle_xendit_webhook
 from app.services.flow_encrytion import FlowCrypto
 
 router = APIRouter(tags=["whatsapp"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/active-sessions")
@@ -142,17 +144,16 @@ async def xendit_webhook_endpoint_legacy(request: Request):
 try:
     PRIVATE_KEY_PASSWORD = settings.WHATSAPP_PRIVATE_KEY_PASSWORD
     if not PRIVATE_KEY_PASSWORD:
-        print("⚠️  Warning: WHATSAPP_PRIVATE_KEY_PASSWORD environment variable not set")
-        print("You can set it or modify the code to use a different method")
+        logger.warning("WHATSAPP_PRIVATE_KEY_PASSWORD environment variable not set")
     
     crypto_handler = FlowCrypto(
         private_key_path="private.pem", 
         password=PRIVATE_KEY_PASSWORD
     )
-    print("🚀 Crypto handler initialized successfully!")
+    logger.info("Crypto handler initialized successfully")
     
 except Exception as e:
-    print(f"❌ Failed to initialize crypto handler: {e}")
+    logger.warning(f"Failed to initialize crypto handler: {e}")
     crypto_handler = None
 
 

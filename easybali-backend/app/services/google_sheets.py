@@ -11,6 +11,34 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 CREDENTIALS_FILE = "easy-bali-b74b61110525.json"
 
 
+def _strip_outer_quotes(value: str) -> str:
+    if not isinstance(value, str):
+        return value
+    s = value.strip()
+    if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
+        return s[1:-1]
+    return s
+
+
+def _normalize_google_creds_json(value: str) -> str:
+    """Normalize Render env var formats; keep JSON valid and fix private_key newlines."""
+    if not isinstance(value, str) or not value.strip():
+        return value
+    raw = _strip_outer_quotes(value)
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, str):
+            parsed = json.loads(parsed)
+        if isinstance(parsed, dict):
+            pk = parsed.get("private_key")
+            if isinstance(pk, str) and "\\n" in pk and "\n" not in pk:
+                parsed["private_key"] = pk.replace("\\n", "\n")
+            return json.dumps(parsed)
+    except Exception:
+        return raw
+    return raw
+
+
 def _get_credentials_path() -> str:
     """Resolve credentials: filesystem file → env var → error."""
     # 1. Check if file exists on disk (local dev)
@@ -27,15 +55,16 @@ def _get_credentials_path() -> str:
     env_json = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
     if env_json:
         try:
+            env_json = _normalize_google_creds_json(env_json)
             tmp_path = os.path.join(tempfile.gettempdir(), CREDENTIALS_FILE)
             with open(tmp_path, "w") as f:
                 f.write(env_json)
-            logger.info("✅ Google credentials loaded from env var")
+            logger.info("Google credentials loaded from env var")
             return tmp_path
         except Exception as e:
-            logger.error(f"❌ Failed to write Google credentials from env: {e}")
+            logger.error(f"Failed to write Google credentials from env: {e}")
 
-    logger.warning("⚠️  Google credentials file not found")
+    logger.warning("Google credentials file not found")
     return CREDENTIALS_FILE  # Will fail at runtime if truly missing
 
 
