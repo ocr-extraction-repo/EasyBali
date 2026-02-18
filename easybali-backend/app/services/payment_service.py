@@ -182,8 +182,8 @@ async def create_xendit_payment_with_distribution(order: Order):
                 invoice_reminder=[NotificationChannel("whatsapp")],
                 invoice_paid=[NotificationChannel("whatsapp")]
             ),
-            success_redirect_url=f"{settings.BASE_URL}/chatbot",
-            failure_redirect_url=f"{settings.BASE_URL}/payment-failed?order={order.order_number}",
+            success_redirect_url=f"{settings.WEB_BASE_URL}/chatbot",
+            failure_redirect_url=f"{settings.WEB_BASE_URL}/payment-failed?order={order.order_number}",
             webhook_url=_resolve_xendit_webhook_url(),
             payment_methods = ["CREDIT_CARD", "BCA", "BNI", "BSI", "BRI", "MANDIRI", "PERMATA", "SAHABAT_SAMPOERNA", "BNC", "ALFAMART", "INDOMARET", "OVO", "DANA", "SHOPEEPAY", "LINKAJA", "JENIUSPAY", "DD_BRI", "DD_BCA_KLIKPAY", "QRIS"],
             items=[

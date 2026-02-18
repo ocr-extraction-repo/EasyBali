@@ -5,6 +5,8 @@ from app.services.payment_service import distribute_order_payments
 from app.services.invoice_generator import generate_and_upload_invoice
 from app.utils.whatsapp_func import send_invoice_and_handle_closure, send_whatsapp_message
 from app.services.websocket_managerr import ConnectionManager
+from app.services.payment_recovery import regenerate_payment_link
+from app.settings.config import settings
 import datetime
 import asyncio
 
@@ -133,16 +135,29 @@ async def handle_xendit_webhook(webhook_data: dict):
                     }
                 )
                 
-                # ============ ENHANCED: Handle expired payments for both connections ============
-                order_data = await order_collection.find_one({"order_number": order_number})
-                if order_data:
-                    await handle_payment_failure_or_expiry(
-                        order_data, 
-                        f"⏰ Payment link expired for order {order_number}. Please contact us to get a new payment link.",
-                        "payment_expired"
-                    )
+                # Auto-regenerate payment link
+                logger.info(f"Auto-regenerating payment link for expired order {order_number}")
+                regeneration_result = await regenerate_payment_link(order_number)
                 
-                logger.info(f"Payment expiration handled for order {order_number}")
+                order_data = await order_collection.find_one({"order_number": order_number})
+                if order_data and regeneration_result.get("success"):
+                    new_link = regeneration_result["payment_url"]
+                    message = (
+                        f"⏰ Your payment link expired for order {order_number}.\n\n"
+                        f"✅ We've generated a new payment link for you:\n{new_link}\n\n"
+                        f"This link is valid for 24 hours. Please complete payment at your earliest convenience."
+                    )
+                    await handle_payment_failure_or_expiry(order_data, message, "payment_regenerated")
+                else:
+                    # Fallback if regeneration fails
+                    if order_data:
+                        fallback_message = (
+                            f"⏰ Payment link expired for order {order_number}.\n\n"
+                            f"Please contact support to get a new payment link."
+                        )
+                        await handle_payment_failure_or_expiry(order_data, fallback_message, "payment_expired")
+                
+                logger.info(f"Payment expiration with auto-regeneration handled for order {order_number}")
             return True
 
         elif webhook_data.get("status") == "FAILED":
@@ -150,6 +165,8 @@ async def handle_xendit_webhook(webhook_data: dict):
             if external_id and external_id.startswith("booking_"):
                 order_number = external_id.split("_")[1]
                 logger.info(f"Payment failed for order number: {order_number}")
+                
+                failure_reason = webhook_data.get("failure_reason", "Unknown error")
                 
                 # Update order status to payment failed
                 await order_collection.update_one(
@@ -159,19 +176,22 @@ async def handle_xendit_webhook(webhook_data: dict):
                             "payment.payment_status": "failed",
                             "payment.failed_at": datetime.datetime.now(),
                             "status": "payment_failed",
-                            "payment.failure_reason": webhook_data.get("failure_reason", "Unknown")
+                            "payment.failure_reason": failure_reason
                         }
                     }
                 )
                 
-                # ============ ENHANCED: Handle failed payments for both connections ============
+                # Offer recovery options
                 order_data = await order_collection.find_one({"order_number": order_number})
                 if order_data:
-                    await handle_payment_failure_or_expiry(
-                        order_data, 
-                        f"❌ Payment failed for order {order_number}. Please try again or contact us for assistance.",
-                        "payment_failed"
+                    regeneration_url = f"{settings.WEB_BASE_URL}/payment-recovery?order={order_number}"
+                    message = (
+                        f"❌ Payment failed for order {order_number}.\n\n"
+                        f"Reason: {failure_reason}\n\n"
+                        f"🔄 To try again with a new payment link, click:\n{regeneration_url}\n\n"
+                        f"Or contact support for assistance."
                     )
+                    await handle_payment_failure_or_expiry(order_data, message, "payment_failed")
                 
                 logger.info(f"Payment failure handled for order {order_number}")
             return True
