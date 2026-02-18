@@ -199,7 +199,15 @@ async def testing_diagnostics(request: Request):
     _assert_non_production_testing()
     _assert_testing_token(request)
 
-    diag = {"mongo_ping": None, "next_order_id": None}
+    import os
+    raw_uri = settings.MONGO_URI or os.environ.get("MONGO_URI", "")
+    # Show only the cluster hostname (not credentials) for security
+    try:
+        cluster_hint = raw_uri.split("@")[-1].split("/")[0] if "@" in raw_uri else "unknown"
+    except Exception:
+        cluster_hint = "parse-error"
+
+    diag = {"mongo_ping": None, "next_order_id": None, "mongo_cluster": cluster_hint}
     try:
         # Ping Mongo via the underlying database.
         await order_collection.database.command("ping")
