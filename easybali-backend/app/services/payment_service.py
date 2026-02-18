@@ -32,7 +32,9 @@ def _resolve_xendit_webhook_url() -> str:
     path = settings.XENDIT_WEBHOOK_PATH or "/webhook/xendit"
     if not path.startswith("/"):
         path = f"/{path}"
-    return f"{settings.BASE_URL}{path}"
+    # Use backend base URL for callbacks; BASE_URL may point to frontend domain.
+    callback_base = settings.WEB_BASE_URL or settings.BASE_URL
+    return f"{callback_base}{path}"
 
 
 def _should_distribute_payments() -> bool:
@@ -52,7 +54,7 @@ async def get_service_provider_bank_details(provider_code: str) -> dict:
     """Fetch service provider bank details from API"""
     try:
         params = {"provider_code": provider_code}
-        url = "https://easy-bali.onrender.com/menu/service-provider-bank"
+        url = f"{settings.BASE_URL}/menu/service-provider-bank"
         
         logger.info(f"Fetching provider bank details for: '{provider_code}'")
         
@@ -76,7 +78,7 @@ async def get_villa_bank_details(provider_code: str) -> dict:
     """Fetch villa bank details from API"""
     try:
         params = {"provider_code": provider_code}
-        url = "https://easy-bali.onrender.com/menu/villa-bank"
+        url = f"{settings.BASE_URL}/menu/villa-bank"
         
         logger.info(f"Fetching villa bank details for: '{provider_code}'")
         
@@ -100,7 +102,7 @@ async def get_price_distribution(service_item: str) -> dict:
     """Fetch price distribution for service item"""
     try:
         params = {"service_item": service_item}
-        url = "https://easy-bali.onrender.com/menu/price_distribution"
+        url = f"{settings.BASE_URL}/menu/price_distribution"
         
         logger.info(f"Fetching price distribution for: '{service_item}'")
         

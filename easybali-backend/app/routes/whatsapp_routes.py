@@ -1,5 +1,5 @@
 import json
-import json
+
 import httpx
 from datetime import date
 import datetime
@@ -115,10 +115,20 @@ async def xendit_webhook_endpoint(request: Request):
 
     if webhook_token != settings.XENDIT_WEBHOOK_CALLBACK_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized webhook")
-    
-    webhook_data = await request.json()
-    await handle_xendit_webhook(webhook_data)
-    return {"status": "success"}
+
+    try:
+        webhook_data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    # Never 500 to the gateway; log errors and ACK.
+    try:
+        ok = await handle_xendit_webhook(webhook_data)
+    except Exception as e:
+        print(f"🚨 Error handling Xendit webhook: {e}")
+        ok = False
+
+    return {"status": "success", "handled": bool(ok)}
 
 
 @router.post("/webhook/xendit-payment")
