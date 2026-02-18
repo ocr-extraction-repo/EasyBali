@@ -14,6 +14,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.10.12"
+      - key: APP_ENV
+        value: "staging"
       - key: OPENAI_API_KEY
         sync: false
       - key: MONGO_URI
@@ -40,6 +42,12 @@ services:
         sync: false
       - key: XENDIT_SECRET_KEY
         sync: false
+      - key: XENDIT_WEBHOOK_CALLBACK_TOKEN
+        sync: false
+      - key: XENDIT_WEBHOOK_PATH
+        value: "/webhook/xendit"
+      - key: XENDIT_ENABLE_DISBURSEMENT
+        value: "false"
       - key: BASE_URL
         sync: false
       - key: WEB_BASE_URL

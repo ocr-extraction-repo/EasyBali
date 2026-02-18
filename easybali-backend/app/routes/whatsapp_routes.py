@@ -109,13 +109,24 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 @router.post("/webhook/xendit")
 async def xendit_webhook_endpoint(request: Request):
     webhook_token = request.headers.get("x-callback-token")
-    
-    if webhook_token != "S9yCjrIxAogZgrfdiLXM7ePCR3dmZLjE3YFFleoQCFrWOSDf":
+
+    if not settings.XENDIT_WEBHOOK_CALLBACK_TOKEN:
+        raise HTTPException(status_code=503, detail="Xendit webhook callback token is not configured")
+
+    if webhook_token != settings.XENDIT_WEBHOOK_CALLBACK_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized webhook")
     
     webhook_data = await request.json()
     await handle_xendit_webhook(webhook_data)
     return {"status": "success"}
+
+
+@router.post("/webhook/xendit-payment")
+async def xendit_webhook_endpoint_legacy(request: Request):
+    """
+    Backward-compatible webhook path used in existing invoice creation payloads.
+    """
+    return await xendit_webhook_endpoint(request)
 
 
 try:

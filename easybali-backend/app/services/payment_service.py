@@ -14,12 +14,29 @@ from app.db.session import order_collection
 from app.models.order_summary import Order
 from app.settings.config import settings
 import logging
+import asyncio
 
 
 logger = logging.getLogger(__name__)
 
-# Set API key
-xendit.set_api_key(settings.XENDIT_SECRET_KEY)
+
+def _set_xendit_api_key() -> bool:
+    if not settings.XENDIT_SECRET_KEY:
+        logger.error("XENDIT_SECRET_KEY is not configured")
+        return False
+    xendit.set_api_key(settings.XENDIT_SECRET_KEY)
+    return True
+
+
+def _resolve_xendit_webhook_url() -> str:
+    path = settings.XENDIT_WEBHOOK_PATH or "/webhook/xendit"
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{settings.BASE_URL}{path}"
+
+
+def _should_distribute_payments() -> bool:
+    return bool(settings.XENDIT_ENABLE_DISBURSEMENT)
 
 
 def clean_price_string(price_str: str) -> int:
@@ -37,21 +54,21 @@ async def get_service_provider_bank_details(provider_code: str) -> dict:
         params = {"provider_code": provider_code}
         url = "https://easy-bali.onrender.com/menu/service-provider-bank"
         
-        print(f"🔍 Fetching provider bank details for: '{provider_code}'")
+        logger.info(f"Fetching provider bank details for: '{provider_code}'")
         
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params)
-            print(f"🔍 Request URL: {response.url}")
-            print(f"🔍 Response status: {response.status_code}")
+            logger.debug(f"Request URL: {response.url}")
+            logger.debug(f"Response status: {response.status_code}")
             
             if response.status_code != 200:
-                print(f"🔍 Response body: {response.text}")
+                logger.warning(f"Non-200 response for provider bank: {response.text}")
             
             response.raise_for_status()
             return response.json()
             
     except Exception as e:
-        print(f"Error fetching service provider bank details: {e}")
+        logger.exception(f"Error fetching service provider bank details: {e}")
         return None
 
 
@@ -61,21 +78,21 @@ async def get_villa_bank_details(provider_code: str) -> dict:
         params = {"provider_code": provider_code}
         url = "https://easy-bali.onrender.com/menu/villa-bank"
         
-        print(f"🔍 Fetching villa bank details for: '{provider_code}'")
+        logger.info(f"Fetching villa bank details for: '{provider_code}'")
         
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params)
-            print(f"🔍 Request URL: {response.url}")
-            print(f"🔍 Response status: {response.status_code}")
+            logger.debug(f"Request URL: {response.url}")
+            logger.debug(f"Response status: {response.status_code}")
             
             if response.status_code != 200:
-                print(f"🔍 Response body: {response.text}")
+                logger.warning(f"Non-200 response for villa bank: {response.text}")
             
             response.raise_for_status()
             return response.json()
             
     except Exception as e:
-        print(f"Error fetching villa bank details: {e}")
+        logger.exception(f"Error fetching villa bank details: {e}")
         return None
 
 
@@ -85,27 +102,33 @@ async def get_price_distribution(service_item: str) -> dict:
         params = {"service_item": service_item}
         url = "https://easy-bali.onrender.com/menu/price_distribution"
         
-        print(f"🔍 Fetching price distribution for: '{service_item}'")
+        logger.info(f"Fetching price distribution for: '{service_item}'")
         
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params)
-            print(f"🔍 Request URL: {response.url}")
-            print(f"🔍 Response status: {response.status_code}")
+            logger.debug(f"Request URL: {response.url}")
+            logger.debug(f"Response status: {response.status_code}")
             
             if response.status_code != 200:
-                print(f"🔍 Response body: {response.text}")
+                logger.warning(f"Non-200 response for price distribution: {response.text}")
             
             response.raise_for_status()
             return response.json()
             
     except Exception as e:
-        print(f"Error fetching price distribution: {e}")
+        logger.exception(f"Error fetching price distribution: {e}")
         return None
 
 # Enhanced payment creation function
 async def create_xendit_payment_with_distribution(order: Order):
     """Create payment invoice and prepare distribution data"""
     try:
+        if not _set_xendit_api_key():
+            return {
+                'success': False,
+                'error': 'XENDIT_SECRET_KEY is not configured'
+            }
+
         # Get price distribution
         price_distribution = await get_price_distribution(order.service_name)
         if not price_distribution:
@@ -131,7 +154,7 @@ async def create_xendit_payment_with_distribution(order: Order):
             service_provider_price = clean_price_string(price_distribution['service_provider_price'])
             villa_price = clean_price_string(price_distribution['villa_price'])
         except ValueError as e:
-            print(f"Price cleaning error: {e}")
+            logger.error(f"Price cleaning error for order {order.order_number}: {e}")
             return {
                 'success': False,
                 'error': f"Invalid price format: {order.price}"
@@ -159,7 +182,7 @@ async def create_xendit_payment_with_distribution(order: Order):
             ),
             success_redirect_url=f"{settings.BASE_URL}/chatbot",
             failure_redirect_url=f"{settings.BASE_URL}/payment-failed?order={order.order_number}",
-            webhook_url=f"{settings.BASE_URL}/webhook/xendit-payment",
+            webhook_url=_resolve_xendit_webhook_url(),
             payment_methods = ["CREDIT_CARD", "BCA", "BNI", "BSI", "BRI", "MANDIRI", "PERMATA", "SAHABAT_SAMPOERNA", "BNC", "ALFAMART", "INDOMARET", "OVO", "DANA", "SHOPEEPAY", "LINKAJA", "JENIUSPAY", "DD_BRI", "DD_BCA_KLIKPAY", "QRIS"],
             items=[
                 InvoiceItem(
@@ -196,13 +219,13 @@ async def create_xendit_payment_with_distribution(order: Order):
         }
         
     except xendit.XenditSdkException as e:
-        print(f"Xendit SDK Error: {str(e)}")
+        logger.exception(f"Xendit SDK Error for order {order.order_number}: {str(e)}")
         return {
             'success': False,
             'error': str(e)
         }
     except Exception as e:
-        print(f"Xendit Invoice Creation Error: {str(e)}")
+        logger.exception(f"Xendit Invoice Creation Error for order {order.order_number}: {str(e)}")
         return {
             'success': False,
             'error': str(e)
@@ -228,12 +251,15 @@ async def update_order_with_payment_info(order_number: str, payment_data: dict):
         )
         return result.modified_count > 0
     except Exception as e:
-        print(f"Database update error: {str(e)}")
+        logger.exception(f"Database update error for order {order_number}: {str(e)}")
         return False
     
 
 async def create_bank_disbursement(client: httpx.AsyncClient, amount: int, bank_details: dict, reference_id: str, description: str):
     try:
+        if not _set_xendit_api_key():
+            return {"success": False, "error": "XENDIT_SECRET_KEY is not configured"}
+
         # Build payload
         disbursement_data = {
             "external_id": reference_id,
@@ -244,7 +270,7 @@ async def create_bank_disbursement(client: httpx.AsyncClient, amount: int, bank_
             "description": description
         }
         bank_code = disbursement_data["bank_code"]
-        print(type(bank_code))
+        logger.debug(f"Bank code type: {type(bank_code)}")
 
         # Proper Basic Auth header
         token = base64.b64encode(f"{settings.XENDIT_SECRET_KEY}:".encode()).decode()
@@ -272,30 +298,58 @@ async def create_bank_disbursement(client: httpx.AsyncClient, amount: int, bank_
         }
 
     except httpx.HTTPStatusError as e:
-        print(f"HTTP Error: {e.response.text}")
+        logger.error(f"HTTP Error during disbursement: {e.response.text}")
         return {"success": False, "error": e.response.text}
     except Exception as e:
-        print(f"Disbursement creation error: {str(e)}")
+        logger.exception(f"Disbursement creation error: {str(e)}")
         return {"success": False, "error": str(e)}
     
 
-async def distribute_order_payments(order_number: str, distribution_data: dict):
+async def distribute_order_payments(order_number: str, distribution_data: dict, retry_count: int = 0):
+    """Distribute payments with automatic retry on failure (max 3 attempts)"""
+    MAX_RETRIES = 3
+    RETRY_DELAYS = [2, 4, 8]  # Exponential backoff in seconds
+    
     try:
-        async with httpx.AsyncClient() as client:
+        if not _should_distribute_payments():
+            logger.info(
+                f"Skipping disbursements for order {order_number}: "
+                "XENDIT_ENABLE_DISBURSEMENT is disabled"
+            )
+            await order_collection.update_one(
+                {"order_number": order_number},
+                {
+                    "$set": {
+                        "payment.disbursements": {
+                            "skipped": True,
+                            "reason": "XENDIT_ENABLE_DISBURSEMENT disabled",
+                            "skipped_at": datetime.datetime.now()
+                        },
+                        "status": "payment_completed"
+                    }
+                }
+            )
+            return
+
+        logger.info(f"Distributing payments for order {order_number} (attempt {retry_count + 1}/{MAX_RETRIES})")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
             sp_result = await create_bank_disbursement(
                 client=client,
                 amount=distribution_data['service_provider']['amount'],
                 bank_details=distribution_data['service_provider']['bank_details'],
-                reference_id=f"sp_{order_number}",
+                reference_id=f"sp_{order_number}_{retry_count}",
                 description=f"Service provider payment for order {order_number}"
             )
             villa_result = await create_bank_disbursement(
                 client=client,
                 amount=distribution_data['villa']['amount'],
                 bank_details=distribution_data['villa']['bank_details'],
-                reference_id=f"villa_{order_number}",
+                reference_id=f"villa_{order_number}_{retry_count}",
                 description=f"Villa commission for order {order_number}"
             )
+            
+            # Track successful distribution
             await order_collection.update_one(
                 {"order_number": order_number},
                 {
@@ -305,7 +359,15 @@ async def distribute_order_payments(order_number: str, distribution_data: dict):
                             "villa": villa_result,
                             "distributed_at": datetime.datetime.now()
                         },
+                        "payment.retry_count": retry_count,
                         "status": "funds_distributed"
+                    },
+                    "$push": {
+                        "payment.retry_history": {
+                            "attempt": retry_count + 1,
+                            "status": "success",
+                            "timestamp": datetime.datetime.now()
+                        }
                     }
                 }
             )
@@ -313,13 +375,33 @@ async def distribute_order_payments(order_number: str, distribution_data: dict):
             logger.info(f"Payments distributed successfully for order {order_number}")
             
     except Exception as e:
-        logger.info(f"Distribution error for order {order_number}: {str(e)}")
+        logger.error(f"Distribution error (attempt {retry_count + 1}/{MAX_RETRIES}) for order {order_number}: {str(e)}")
+        
+        # Record failure attempt
         await order_collection.update_one(
             {"order_number": order_number},
             {
                 "$set": {
                     "payment.distribution_error": str(e),
-                    "status": "distribution_failed"
+                    "payment.retry_count": retry_count,
+                    "status": "distribution_failed" if retry_count >= MAX_RETRIES - 1 else "distribution_retrying"
+                },
+                "$push": {
+                    "payment.retry_history": {
+                        "attempt": retry_count + 1,
+                        "status": "failed",
+                        "error": str(e),
+                        "timestamp": datetime.datetime.now()
+                    }
                 }
             }
         )
+        
+        # Retry with exponential backoff if attempts remaining
+        if retry_count < MAX_RETRIES - 1:
+            delay = RETRY_DELAYS[retry_count]
+            logger.info(f"Retrying distribution for order {order_number} in {delay}s...")
+            await asyncio.sleep(delay)
+            return await distribute_order_payments(order_number, distribution_data, retry_count + 1)
+        else:
+            logger.error(f"Max retries ({MAX_RETRIES}) reached for order {order_number}. Manual intervention required.")
