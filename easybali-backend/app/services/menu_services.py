@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Google Sheet configurations
 SHEET_ID = "1tuGBnQFjDntJQglofA17uHhiyekkVyDoSInErbwfR24"
-workbook = get_workbook(SHEET_ID)
+workbook = None
 
 # Cache for storing data
 cache = {
@@ -26,6 +26,9 @@ def load_data_into_cache():
     """Loads data from Google Sheets into cache."""
     print(f"Refreshing data at {datetime.now()}...")
     try:
+        global workbook
+        if workbook is None:
+            workbook = get_workbook(SHEET_ID)
         # Load menu data
         menu_structure = workbook.get_worksheet(4)
         cache["menu_df"] = clean_dataframe(menu_structure.get_all_values())
