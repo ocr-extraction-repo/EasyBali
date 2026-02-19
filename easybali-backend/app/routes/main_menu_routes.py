@@ -1,17 +1,31 @@
 from fastapi import APIRouter, HTTPException
 from app.services.menu_services import get_main_menu, get_sub_menu, load_data_into_cache, cache, get_sub_category, get_service_items, get_service_overview, get_service_providers, get_order_service_sub_menu, get_restaurants_menu, get_villa_data, get_price_distribution
-from app.models.villa_data import VillaData
 from app.services.google_sheets import get_workbook
 from app.utils.qrutils import generate_and_upload_qrcode
 from app.utils.bucket import upload_to_s3
 from fastapi import Form, File, UploadFile
-from urllib.parse import unquote
+from app.settings.config import settings
+import re
 
 # Google Sheet configurations
 SHEET_ID = "1tuGBnQFjDntJQglofA17uHhiyekkVyDoSInErbwfR24"
-workbook = get_workbook(SHEET_ID)
+workbook = None
 
 router = APIRouter(prefix="/menu", tags=["Menu"])
+
+
+def _get_workbook():
+    global workbook
+    if workbook is None:
+        workbook = get_workbook(SHEET_ID)
+    return workbook
+
+
+def _slugify_villa_name(villa_name: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9\s-]", "", villa_name or "")
+    slug = re.sub(r"\s+", "-", slug.strip())
+    slug = re.sub(r"-{2,}", "-", slug)
+    return slug.lower()
 
 @router.get("/main", summary="Get main menu items")
 async def main_menu():
@@ -102,36 +116,32 @@ async def add_villa_data(
     instagram_url: str = Form("")
 ):
     try:
+        workbook_ref = _get_workbook()
+
         # Upload entrance picture to S3
         entrance_picture_url = await upload_to_s3(entrance_picture)
 
-        # Prepare data for QR code generation
-        qr_data = {
-            "name_of_villa": name_of_villa,
-            "address": address,
-            "google_maps_link": google_maps_link,
-            "directions": directions,
-            "entrance_picture": entrance_picture_url,
-            "location": location,
-            "contact_vm": contact_vm,
-            "contact_mt": contact_mt,
-            "passport_collection": passport_collection,
-            "number_of_bdr": number_of_bdr,
-            "website_url": website_url,
-            "whatsapp_url": whatsapp_url,
-            "messenger_url": messenger_url,
-            "instagram_url": instagram_url,
-        }
+        # Access worksheet (Google Sheets). Villa registry is worksheet index 5.
+        worksheet = workbook_ref.get_worksheet(5)
 
-        # Generate and upload the QR code
-        qr_code_url = await generate_and_upload_qrcode(qr_data)
+        # Find next stable villa number (prevents duplicates if sheet has deletions/gaps).
+        existing_rows = worksheet.get_all_values()
+        existing_codes = []
+        for row in existing_rows[1:]:
+            if not row:
+                continue
+            raw_code = str(row[0]).strip().upper()
+            match = re.match(r"^V(\d+)$", raw_code)
+            if match:
+                existing_codes.append(int(match.group(1)))
+        next_number = f"V{(max(existing_codes) + 1) if existing_codes else 1}"
 
-        # Access worksheet (Google Sheets)
-        worksheet = workbook.get_worksheet(3)  # Adjust this index based on your sheet structure
+        backend_base_url = (settings.BASE_URL or "https://easy-bali-backend.onrender.com").rstrip("/")
+        villa_slug = _slugify_villa_name(name_of_villa)
+        qr_landing_url = f"{backend_base_url}/villa/{villa_slug}?code={next_number}"
 
-        # Find the next available row number
-        existing_rows = len(worksheet.get_all_values())
-        next_number = f"V{existing_rows}"
+        # Generate and upload the QR code (URL payload for deterministic scan behavior)
+        qr_code_url = await generate_and_upload_qrcode(qr_landing_url)
 
         # Prepare row data
         row_data = [
@@ -156,7 +166,13 @@ async def add_villa_data(
         # Append data to Google Sheets
         worksheet.append_row(row_data, value_input_option="USER_ENTERED")
 
-        return {"status": "success", "message": "Villa data added successfully!"}
+        return {
+            "status": "success",
+            "message": "Villa data added successfully!",
+            "villa_code": next_number,
+            "qr_landing_url": qr_landing_url,
+            "qr_code_url": qr_code_url
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error adding villa data: {str(e)}")
 
