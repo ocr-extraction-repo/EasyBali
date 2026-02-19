@@ -9,7 +9,7 @@ from typing import Optional, Dict, List, Any
 from app.services.whatsapp_ai_prompt import whatsapp_response
 from app.services.ai_menu_generator import ai_menu_generator
 from app.services.invoice_generator import generate_and_upload_invoice
-from app.services.menu_services import get_service_provider_by_whatsapp, get_villa_code_by_name, get_service_base_price
+from app.services.menu_services import get_service_provider_by_whatsapp, get_villa_code_by_name, get_service_base_price, is_known_villa_code
 from app.services.order_summary import initiate_chat_session, active_chat_sessions, save_order_to_db, format_order_summary, check_order_confirmation,order_sessions, update_order_confirmation, get_sender_id_by_order, get_order_by_number
 from app.settings.config import settings
 from app.db.session import order_collection, villa_code_collection
@@ -1283,15 +1283,43 @@ async def send_ai_whatsapp_order_flow_message(recipient_id: str, flow_token: str
         traceback.print_exc()
         return None
 
+def extract_villa_code_token(text: str) -> Optional[str]:
+    if not text:
+        return None
 
+    patterns = [
+        r"\[?\s*VILLA_CODE\s*:\s*(V\d+)\s*\]?",
+        r"\bVCODE\s*:\s*(V\d+)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).upper()
+    return None
 
 
 def extract_villa_name(text: str):
-    words = text.split()
-    for i, word in enumerate(words):
-        if word.lower() == "villa" and i + 1 < len(words):
-            villa_name = words[i + 1]
-            return f"Villa {villa_name}" 
+    if not text:
+        return None
+
+    cleaned_text = re.sub(r"\[?\s*VILLA_CODE\s*:\s*V\d+\s*\]?", "", text, flags=re.IGNORECASE).strip()
+
+    # Preferred pattern from QR/redirect links.
+    intro_match = re.search(r"hi\s*,?\s*i\s*am\s*in\s+(.+)", cleaned_text, flags=re.IGNORECASE)
+    if intro_match:
+        villa_name = intro_match.group(1).strip(" .,!?:;")
+        if not villa_name:
+            return None
+        if villa_name.lower().startswith("villa "):
+            return villa_name
+        return f"Villa {villa_name}"
+
+    # Fallback for manual text where "villa" appears elsewhere.
+    villa_match = re.search(r"\bvilla\b\s+(.+)", cleaned_text, flags=re.IGNORECASE)
+    if villa_match:
+        villa_name = villa_match.group(1).strip(" .,!?:;")
+        return f"Villa {villa_name}" if villa_name else None
+
     return None
 
 
@@ -1649,9 +1677,46 @@ async def process_message(sender_id: str, message_payload: dict, message_id:str)
                         await send_whatsapp_message(sender_id, "Invalid date format received. Please try selecting the date again.")
                         return
         
-        if message_text and "Hi, I am in" in message_text:    
+        # Preferred QR entry: explicit villa code token.
+        if message_text:
+            villa_code_token = extract_villa_code_token(message_text)
+            if villa_code_token:
+                try:
+                    if await is_known_villa_code(villa_code_token):
+                        success = await save_user_villa_code(sender_id, villa_code_token)
+                        if success:
+                            await starting_message(sender_id)
+                            return
+                        await send_whatsapp_message(
+                            sender_id,
+                            "❌ Sorry, there was an error setting up your villa access. Please try the link again."
+                        )
+                        return
+
+                    await send_whatsapp_message(
+                        sender_id,
+                        "❌ This villa code is not recognized. Please scan the villa QR again or enter a valid villa code (e.g., V12)."
+                    )
+                    return
+                except Exception as e:
+                    print(f"Error processing villa code token: {e}")
+                    await send_whatsapp_message(
+                        sender_id,
+                        "❌ There was an error processing your villa code. Please try again."
+                    )
+                    return
+
+        # Backward-compatible path for older links without explicit code.
+        if message_text and "Hi, I am in" in message_text:
             try:
-                villa_name = extract_villa_name (message_text)
+                villa_name = extract_villa_name(message_text)
+                if not villa_name:
+                    await send_whatsapp_message(
+                        sender_id,
+                        "❌ We couldn't identify the villa name. Please scan the QR again."
+                    )
+                    return
+
                 villa_code = await get_villa_code_by_name(villa_name)
                 
                 if villa_code:
@@ -1698,6 +1763,13 @@ async def process_message(sender_id: str, message_payload: dict, message_id:str)
             villa_code = message_text.strip().upper()
 
             if is_valid_villa_code(villa_code):
+                if not await is_known_villa_code(villa_code):
+                    await send_whatsapp_message(
+                        sender_id,
+                        "❌ Villa code not found. Please recheck and enter a valid code (e.g., V12)."
+                    )
+                    return
+
                 success = await save_user_villa_code(sender_id, villa_code)
                 if success:
                     villa_code_sessions.pop(sender_id, None)

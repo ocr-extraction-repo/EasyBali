@@ -401,6 +401,8 @@ async def get_service_provider_by_whatsapp(whatsapp_number: str):
 
 async def get_villa_code_by_name(villa_name: str):
     if cache["villas_data"] is None:
+        load_data_into_cache()
+    if cache["villas_data"] is None:
         raise ValueError("Villa data not loaded")
     
     try:
@@ -421,8 +423,27 @@ async def get_villa_code_by_name(villa_name: str):
             return None
             
         # Return the villa code (Number column)
-        return matching_villa.iloc[0]["Number"]
+        return str(matching_villa.iloc[0]["Number"]).strip().upper()
         
     except Exception as e:
         print(f"Error retrieving villa code: {e}")
         return None
+
+
+async def is_known_villa_code(villa_code: str) -> bool:
+    if not villa_code:
+        return False
+    if cache.get("villas_data") is None:
+        load_data_into_cache()
+    if cache.get("villas_data") is None:
+        return False
+
+    try:
+        normalized_code = str(villa_code).strip().upper()
+        villas_df = cache["villas_data"]
+        if "Number" not in villas_df.columns:
+            return False
+        return villas_df["Number"].astype(str).str.strip().str.upper().eq(normalized_code).any()
+    except Exception as e:
+        print(f"Error validating villa code '{villa_code}': {e}")
+        return False
