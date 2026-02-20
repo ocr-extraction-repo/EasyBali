@@ -7,10 +7,11 @@ from app.services.order_summary import get_next_order_id
 import uuid
 import re
 import datetime
-from app.utils.whatsapp_func import fetch_whatsapp_numbers, send_whatsapp_order_to_SP, process_message
+from app.utils.whatsapp_func import fetch_whatsapp_numbers, send_whatsapp_order_to_SP
 from app.settings.config import settings
 from app.services.payment_service import create_xendit_payment_with_distribution, update_order_with_payment_info
-from app.services.menu_services import cache
+from app.services.menu_services import cache, get_service_provider_by_whatsapp
+from app.services.order_summary import get_next_order_id, update_order_confirmation, get_sender_id_by_order
 import pandas as pd
 import logging
 
@@ -293,9 +294,8 @@ async def add_mock_provider(payload: MockProviderPayload, request: Request):
 @router.post("/testing/simulate-provider-response")
 async def simulate_provider_response(payload: SimulateProviderPayload, request: Request):
     """
-    Simulate a service-provider clicking "Accept" (or "Decline") in WhatsApp.
-    This constructs the same interactive-button webhook payload that WhatsApp
-    would send and feeds it into `process_message`.
+    Simulate a service-provider clicking "Accept" (or "Decline").
+    Inlines the core logic from whatsapp_func.py button_reply -> Yes flow.
     """
     _assert_non_production_testing()
     _assert_testing_token(request)
@@ -305,50 +305,103 @@ async def simulate_provider_response(payload: SimulateProviderPayload, request: 
     if not order_data:
         raise HTTPException(status_code=404, detail=f"Order {payload.order_number} not found")
 
-    if payload.action.lower() == "accept":
-        button_title = "✅ Accept"
-        button_id = payload.order_number
-    elif payload.action.lower() == "decline":
-        button_title = "❌ Decline"
-        button_id = f"decline_{payload.order_number}"
-    else:
+    if payload.action.lower() == "decline":
+        await order_collection.update_one(
+            {"order_number": payload.order_number},
+            {"$set": {"status": "declined"}}
+        )
+        return {"success": True, "order_number": payload.order_number, "action": "decline", "order_status": "declined"}
+
+    if payload.action.lower() != "accept":
         raise HTTPException(status_code=400, detail="action must be 'accept' or 'decline'")
 
-    # Build the same payload shape WhatsApp sends for an interactive button reply
-    message_payload = {
-        "interactive": {
-            "type": "button_reply",
-            "button_reply": {
-                "id": button_id,
-                "title": button_title,
-            },
-        }
-    }
+    # ---- Accept flow (mirrors whatsapp_func.py lines 1450-1540) ----
 
-    fake_message_id = f"simulated_{payload.order_number}_{datetime.datetime.now().timestamp()}"
+    # 1. Resolve provider code from the mock cache
+    service_provider_code = await get_service_provider_by_whatsapp(payload.provider_phone)
+    logger.info(f"Resolved provider code: {service_provider_code} for {payload.provider_phone}")
 
-    logger.info(
-        f"Simulating provider response: phone={payload.provider_phone}, "
-        f"order={payload.order_number}, action={payload.action}"
+    # 2. Attach provider code to the order
+    await order_collection.update_one(
+        {"order_number": payload.order_number},
+        {"$set": {"service_provider_code": service_provider_code}}
     )
 
-    try:
-        await process_message(payload.provider_phone, message_payload, fake_message_id)
-    except Exception as exc:
-        logger.exception(f"process_message failed during simulation: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+    # 3. Mark order as confirmed
+    await order_collection.update_one(
+        {"order_number": payload.order_number},
+        {"$set": {
+            "confirmed_by_provider": payload.provider_phone,
+            "confirmed_at": datetime.datetime.now(),
+        }}
+    )
+    user_sender_id = await update_order_confirmation(payload.order_number, True)
+    logger.info(f"Order {payload.order_number} confirmed. User sender_id: {user_sender_id}")
 
-    # Re-read order to return updated state
-    updated = await order_collection.find_one({"order_number": payload.order_number})
-    payment_doc = updated.get("payment", {}) if updated else {}
+    # 4. Re-read order and parse date for the Order model
+    order_data = await order_collection.find_one({"order_number": payload.order_number})
+    if not order_data:
+        raise HTTPException(status_code=500, detail="Order disappeared after confirmation")
+
+    raw_date = order_data.get("date")
+    parsed_date = None
+    if raw_date:
+        if isinstance(raw_date, datetime.datetime):
+            parsed_date = raw_date
+        elif isinstance(raw_date, str):
+            try:
+                parsed_date = datetime.datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                parsed_date = None
+
+    order = Order(
+        sender_id=order_data.get("sender_id"),
+        order_number=payload.order_number,
+        service_name=order_data.get("service_name"),
+        date=parsed_date,
+        time=order_data.get("time"),
+        price=str(order_data.get("price") or order_data.get("final_price") or "0"),
+        confirmation=True,
+        status=order_data.get("status") or "pending",
+        service_provider_code=service_provider_code,
+        villa_code=order_data.get("villa_code"),
+        name=order_data.get("name"),
+        phone_number=order_data.get("phone_number"),
+    )
+
+    # 5. Create Xendit payment
+    payment_result = await create_xendit_payment_with_distribution(order)
+    logger.info(f"Payment result for {payload.order_number}: {payment_result}")
+
+    payment_url = None
+    if payment_result.get("success"):
+        await update_order_with_payment_info(payload.order_number, payment_result)
+        payment_url = payment_result.get("payment_url")
+
+        # 6. Push payment link to WebSocket (website bookings)
+        if user_sender_id and not user_sender_id.isdigit():
+            payment_message = (
+                "🌴 ***Your Order Awaits!***\n"
+                "Thank you for choosing EASY Bali.\n"
+                "Please confirm your **order** by completing the payment through the secure link below.\n"
+                "Once payment is confirmed, we'll take care of the rest."
+            )
+            await manager.send_personal_message(
+                message=f"{payment_message}\n[link]({payment_url})",
+                session_id=user_sender_id,
+                message_type="link_message"
+            )
+    else:
+        logger.error(f"Payment creation failed: {payment_result.get('error')}")
 
     return {
-        "success": True,
+        "success": payment_result.get("success", False),
         "order_number": payload.order_number,
-        "action": payload.action,
-        "order_status": updated.get("status") if updated else None,
-        "confirmation": updated.get("confirmation") if updated else None,
-        "payment_url": payment_doc.get("payment_url"),
+        "action": "accept",
+        "order_status": "confirmed",
+        "payment_url": payment_url,
+        "distribution_warning": payment_result.get("distribution_warning"),
+        "error": payment_result.get("error") if not payment_result.get("success") else None,
     }
 
 
