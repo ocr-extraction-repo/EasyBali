@@ -19,6 +19,7 @@ import CurrencyConverter from "./pages/tools/CurrencyConverter";
 import VoiceTranslator from "./pages/tools/VoiceTranslator";
 import WhatToDoToday from "./pages/tools/WhatToDoToday";
 import GeneralChat from "./pages/tools/GeneralChat";
+import PaymentFailed from "./pages/PaymentFailed";
 const AppLayout = () => {
   return (
     <>
@@ -79,6 +80,14 @@ const appRouter = createBrowserRouter([
   {
     path: "/tools/what-to-do-today",
     element: <WhatToDoToday />,
+  },
+  {
+    path: "/payment-failed",
+    element: <PaymentFailed />,
+  },
+  {
+    path: "/payment-recovery",
+    element: <PaymentFailed />,
   },
 
   // {
