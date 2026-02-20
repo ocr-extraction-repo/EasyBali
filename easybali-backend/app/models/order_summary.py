@@ -1,6 +1,6 @@
 import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class PaymentInfo(BaseModel):
     xendit_invoice_id: Optional[str] = None
@@ -12,8 +12,8 @@ class PaymentInfo(BaseModel):
     
     # Error recovery fields
     retry_count: int = 0
-    retry_history: list = []
-    regeneration_history: list = []
+    retry_history: list = Field(default_factory=list)
+    regeneration_history: list = Field(default_factory=list)
     failure_reason: Optional[str] = None
     distribution_error: Optional[str] = None
 
@@ -28,11 +28,11 @@ class Order(BaseModel):
     price: Optional[str] = None
     confirmation: bool = False
     status: str = "pending"
-    payment: PaymentInfo = PaymentInfo()
+    payment: PaymentInfo = Field(default_factory=PaymentInfo)
     service_provider_code:Optional[str] = None
-    villa_code:str = None
-    created_at: datetime.datetime = datetime.datetime.now()
-    updated_at: datetime.datetime = datetime.datetime.now()
+    villa_code: Optional[str] = None
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    updated_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
 class WebOrder(BaseModel):
     service_name: str
@@ -44,4 +44,4 @@ class WebOrder(BaseModel):
     price: Optional[str] = None
     no_of_person:Optional[str]=None
     confirmation: bool = False
-    payment: PaymentInfo = PaymentInfo()
+    payment: PaymentInfo = Field(default_factory=PaymentInfo)
